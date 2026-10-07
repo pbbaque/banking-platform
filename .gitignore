@@ -7,6 +7,7 @@
 **/.env.*
 !.env.example
 !**/.env.example
+**/application-local.yml
 
 # =========================
 # Java / Maven
