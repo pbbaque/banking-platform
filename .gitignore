@@ -1,74 +1,192 @@
 # =========================
 # Environment / secrets
 # =========================
+
 .env
 **/.env
 .env.*
 **/.env.*
+
+# Keep environment templates
 !.env.example
 !**/.env.example
+
+# Local Spring configuration / secrets
+application-local.yml
 **/application-local.yml
+application-local.yaml
+**/application-local.yaml
+application-local.properties
+**/application-local.properties
+
 
 # =========================
 # Java / Maven
 # =========================
+
 target/
 **/target/
+
 *.class
 *.jar
 *.war
 *.ear
+
+# Maven local/generated files
 .mvn/timing.properties
+**/.mvn/timing.properties
+
+# JVM crash / diagnostic files
+hs_err_pid*
+replay_pid*
+*.hprof
+
 
 # =========================
-# Node / Angular
+# Node / Angular / frontend
 # =========================
+
 node_modules/
 **/node_modules/
+
 dist/
 **/dist/
+
 .angular/
 **/.angular/
+
 coverage/
 **/coverage/
 
-# =========================
-# IDE / Editors
-# =========================
-.vscode/*
-!.vscode/settings.json
+.nx/
+**/.nx/
 
-/backend/customer-service/.vscode/
+.next/
+**/.next/
+
+out/
+**/out/
+
+
+# =========================
+# VS Code
+# =========================
+
+# Ignore every .vscode directory by default
+**/.vscode/
+
+# Allow the root .vscode directory to be inspected
+!/.vscode/
+
+# Ignore everything inside the root .vscode directory
+/.vscode/*
+
+# Keep only the shared root settings
+!/.vscode/settings.json
+
+
+# =========================
+# IntelliJ IDEA
+# =========================
 
 .idea/
+**/.idea/
 *.iml
+*.iws
+*.ipr
+
+
+# =========================
+# Eclipse / STS
+# =========================
+
+.classpath
+.project
+.settings/
+.factorypath
+
+**/.classpath
+**/.project
+**/.settings/
+**/.factorypath
+
 
 # =========================
 # Logs
 # =========================
+
 *.log
+
 logs/
 **/logs/
 
+log/
+**/log/
+
+
 # =========================
-# OS
+# Test / analysis temporary files
 # =========================
-.DS_Store
-Thumbs.db
-Desktop.ini
+
+*.exec
+
+surefire-reports/
+**/surefire-reports/
+
+failsafe-reports/
+**/failsafe-reports/
+
 
 # =========================
 # Temporary / cache files
 # =========================
+
 *.tmp
 *.temp
+
 *.swp
 *.swo
+
 .cache/
 **/.cache/
 
+.tmp/
+**/.tmp/
+
+
 # =========================
-# Local project notes / command references
+# OS files
 # =========================
+
+.DS_Store
+**/.DS_Store
+
+Thumbs.db
+Desktop.ini
+
+
+# =========================
+# Local project documentation
+# =========================
+
 /local-docs/
 /backend/local-docs/
+
+
+# =========================
+# Local Docker / database data
+# =========================
+
+# Only relevant if a service later uses bind-mounted
+# local database directories instead of named volumes.
+**/.docker-data/
+**/docker-data/
+**/.db-data/
+
+
+# =========================
+# Miscellaneous local files
+# =========================
+
+*.bak
+*.orig
