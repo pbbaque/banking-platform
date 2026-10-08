@@ -37,6 +37,9 @@ coverage/
 # =========================
 .vscode/*
 !.vscode/settings.json
+
+/backend/customer-service/.vscode/
+
 .idea/
 *.iml
 
@@ -63,3 +66,9 @@ Desktop.ini
 *.swo
 .cache/
 **/.cache/
+
+# =========================
+# Local project notes / command references
+# =========================
+/local-docs/
+/backend/local-docs/
