@@ -1,26 +1,25 @@
 package com.pbbaque.banking.customer.repository;
 
+import com.pbbaque.banking.customer.domain.Customer;
+import com.pbbaque.banking.customer.domain.DocumentType;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import com.pbbaque.banking.customer.domain.Customer;
-import com.pbbaque.banking.customer.domain.DocumentType;
-
+/** Repository for accessing and querying customer persistence data. */
 public interface CustomerRepository extends JpaRepository<Customer, UUID> {
 
-    List<Customer> findAllByDeletedAtIsNull();
+  List<Customer> findAllByDeletedAtIsNull();
 
-    Optional<Customer> findByIdAndDeletedAtIsNull(UUID id);
+  Optional<Customer> findByIdAndDeletedAtIsNull(UUID id);
 
-    Optional<Customer> findByIdentityUserId(UUID userId);
+  Optional<Customer> findByIdentityUserId(UUID userId);
 
-    Optional<Customer> findByDocumentTypeAndDocumentNumber(DocumentType documentType, String documentNumber);
+  Optional<Customer> findByDocumentTypeAndDocumentNumber(
+      DocumentType documentType, String documentNumber);
 
-    boolean existsByIdentityUserId(UUID userId);
+  boolean existsByIdentityUserId(UUID userId);
 
-    boolean existsByDocumentTypeAndDocumentNumber(DocumentType documentType, String documentNumber);
-
+  boolean existsByDocumentTypeAndDocumentNumber(DocumentType documentType, String documentNumber);
 }
