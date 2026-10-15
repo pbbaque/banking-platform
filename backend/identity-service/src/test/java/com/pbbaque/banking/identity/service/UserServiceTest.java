@@ -1,11 +1,23 @@
 package com.pbbaque.banking.identity.service;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
+
 import com.pbbaque.banking.identity.domain.User;
+import com.pbbaque.banking.identity.domain.UserStatus;
 import com.pbbaque.banking.identity.dto.CreateUserRequest;
+import com.pbbaque.banking.identity.dto.LoginRequest;
+import com.pbbaque.banking.identity.dto.LoginResponse;
 import com.pbbaque.banking.identity.dto.UserResponse;
+import com.pbbaque.banking.identity.exception.InvalidCredentialsException;
+import com.pbbaque.banking.identity.exception.InvalidUserStateTransitionException;
 import com.pbbaque.banking.identity.exception.UserAlreadyExistsException;
 import com.pbbaque.banking.identity.exception.UserNotFoundException;
 import com.pbbaque.banking.identity.repository.UserRepository;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,155 +25,238 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
-
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 
-    @Mock
-    private UserRepository userRepository;
+  @Mock private UserRepository userRepository;
 
-    @Mock
-    private PasswordEncoder passwordEncoder;
+  @Mock private PasswordEncoder passwordEncoder;
 
-    private UserService userService;
+  @Mock private JwtService jwtService;
 
-    @BeforeEach
-    void setUp() {
-        userService = new UserService(
-                userRepository,
-                passwordEncoder);
-    }
+  private UserService userService;
 
-    @Test
-    void shouldCreateUser() {
-        CreateUserRequest request = createRequest();
+  @BeforeEach
+  void setUp() {
+    userService = new UserService(userRepository, passwordEncoder, jwtService);
+  }
 
-        when(userRepository.existsByUsername(request.username()))
-                .thenReturn(false);
+  @Test
+  void shouldCreateUser() {
+    CreateUserRequest request = createRequest();
 
-        when(userRepository.existsByEmail(request.email()))
-                .thenReturn(false);
+    when(userRepository.existsByUsername(request.username())).thenReturn(false);
 
-        when(passwordEncoder.encode(request.password()))
-                .thenReturn("$2a$10$encodedPassword");
+    when(userRepository.existsByEmail(request.email())).thenReturn(false);
 
-        when(userRepository.save(any(User.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+    when(passwordEncoder.encode(request.password())).thenReturn("$2a$10$encodedPassword");
 
-        UserResponse response = userService.create(request);
+    when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertNotNull(response.id());
-        assertEquals(request.username(), response.username());
-        assertEquals(request.email(), response.email());
-        assertEquals("PENDING", response.status().name());
+    UserResponse response = userService.create(request);
 
-        verify(passwordEncoder).encode(request.password());
-        verify(userRepository).save(any(User.class));
-    }
+    assertNotNull(response.id());
+    assertEquals(request.username(), response.username());
+    assertEquals(request.email(), response.email());
+    assertEquals("PENDING", response.status().name());
 
-    @Test
-    void shouldRejectDuplicateUsername() {
-        CreateUserRequest request = createRequest();
+    verify(passwordEncoder).encode(request.password());
+    verify(userRepository).save(any(User.class));
+  }
 
-        when(userRepository.existsByUsername(request.username()))
-                .thenReturn(true);
+  @Test
+  void shouldRejectDuplicateUsername() {
+    CreateUserRequest request = createRequest();
 
-        assertThrows(
-                UserAlreadyExistsException.class,
-                () -> userService.create(request));
+    when(userRepository.existsByUsername(request.username())).thenReturn(true);
 
-        verify(userRepository, never()).existsByEmail(anyString());
-        verify(passwordEncoder, never()).encode(anyString());
-        verify(userRepository, never()).save(any(User.class));
-    }
+    assertThrows(UserAlreadyExistsException.class, () -> userService.create(request));
 
-    @Test
-    void shouldRejectDuplicateEmail() {
-        CreateUserRequest request = createRequest();
+    verify(userRepository, never()).existsByEmail(anyString());
+    verify(passwordEncoder, never()).encode(anyString());
+    verify(userRepository, never()).save(any(User.class));
+  }
 
-        when(userRepository.existsByUsername(request.username()))
-                .thenReturn(false);
+  @Test
+  void shouldRejectDuplicateEmail() {
+    CreateUserRequest request = createRequest();
 
-        when(userRepository.existsByEmail(request.email()))
-                .thenReturn(true);
+    when(userRepository.existsByUsername(request.username())).thenReturn(false);
 
-        assertThrows(
-                UserAlreadyExistsException.class,
-                () -> userService.create(request));
+    when(userRepository.existsByEmail(request.email())).thenReturn(true);
 
-        verify(passwordEncoder, never()).encode(anyString());
-        verify(userRepository, never()).save(any(User.class));
-    }
+    assertThrows(UserAlreadyExistsException.class, () -> userService.create(request));
 
-    @Test
-    void shouldGetUserById() {
-        User user = createUser();
+    verify(passwordEncoder, never()).encode(anyString());
+    verify(userRepository, never()).save(any(User.class));
+  }
 
-        when(userRepository.findById(user.getId()))
-                .thenReturn(Optional.of(user));
+  @Test
+  void shouldGetUserById() {
+    User user = createUser();
 
-        UserResponse response = userService.getById(user.getId());
+    when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
 
-        assertEquals(user.getId(), response.id());
-        assertEquals(user.getUsername(), response.username());
-        assertEquals(user.getEmail(), response.email());
-    }
+    UserResponse response = userService.getById(user.getId());
 
-    @Test
-    void shouldThrowWhenUserByIdDoesNotExist() {
-        UUID id = UUID.randomUUID();
+    assertEquals(user.getId(), response.id());
+    assertEquals(user.getUsername(), response.username());
+    assertEquals(user.getEmail(), response.email());
+  }
 
-        when(userRepository.findById(id))
-                .thenReturn(Optional.empty());
+  @Test
+  void shouldThrowWhenUserByIdDoesNotExist() {
+    UUID id = UUID.randomUUID();
 
-        assertThrows(
-                UserNotFoundException.class,
-                () -> userService.getById(id));
-    }
+    when(userRepository.findById(id)).thenReturn(Optional.empty());
 
-    @Test
-    void shouldGetUserByUsername() {
-        User user = createUser();
+    assertThrows(UserNotFoundException.class, () -> userService.getById(id));
+  }
 
-        when(userRepository.findByUsername(user.getUsername()))
-                .thenReturn(Optional.of(user));
+  @Test
+  void shouldGetUserByUsername() {
+    User user = createUser();
 
-        UserResponse response = userService.getByUsername(user.getUsername());
+    when(userRepository.findByUsername(user.getUsername())).thenReturn(Optional.of(user));
 
-        assertEquals(user.getId(), response.id());
-        assertEquals(user.getUsername(), response.username());
-        assertEquals(user.getEmail(), response.email());
-    }
+    UserResponse response = userService.getByUsername(user.getUsername());
 
-    @Test
-    void shouldThrowWhenUsernameDoesNotExist() {
-        String username = "99999999Z";
+    assertEquals(user.getId(), response.id());
+    assertEquals(user.getUsername(), response.username());
+    assertEquals(user.getEmail(), response.email());
+  }
 
-        when(userRepository.findByUsername(username))
-                .thenReturn(Optional.empty());
+  @Test
+  void shouldThrowWhenUsernameDoesNotExist() {
+    String username = "99999999Z";
 
-        assertThrows(
-                UserNotFoundException.class,
-                () -> userService.getByUsername(username));
-    }
+    when(userRepository.findByUsername(username)).thenReturn(Optional.empty());
 
-    private CreateUserRequest createRequest() {
-        return new CreateUserRequest(
-                "12345678A",
-                "test@banking-platform.local",
-                "SecurePassword123!");
-    }
+    assertThrows(UserNotFoundException.class, () -> userService.getByUsername(username));
+  }
 
-    private User createUser() {
-        return User.create(
-                "12345678A",
-                "test@banking-platform.local",
-                "$2a$10$encodedPassword");
-    }
+  private CreateUserRequest createRequest() {
+    return new CreateUserRequest("12345678A", "test@banking-platform.local", "SecurePassword123!");
+  }
+
+  private User createUser() {
+    return User.create("12345678A", "test@banking-platform.local", "$2a$10$encodedPassword");
+  }
+
+  @Test
+  void shouldActivateUser() {
+    User user = createUser();
+
+    when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+
+    UserResponse response = userService.activate(user.getId());
+
+    assertEquals(UserStatus.ACTIVE, response.status());
+  }
+
+  @Test
+  void shouldLockUser() {
+    User user = createUser();
+    user.activate();
+
+    when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+
+    UserResponse response = userService.lock(user.getId());
+
+    assertEquals(UserStatus.LOCKED, response.status());
+  }
+
+  @Test
+  void shouldDisableUser() {
+    User user = createUser();
+
+    when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+
+    UserResponse response = userService.disable(user.getId());
+
+    assertEquals(UserStatus.DISABLED, response.status());
+  }
+
+  @Test
+  void shouldThrowWhenActivatingUnknownUser() {
+    UUID id = UUID.randomUUID();
+
+    when(userRepository.findById(id)).thenReturn(Optional.empty());
+
+    assertThrows(UserNotFoundException.class, () -> userService.activate(id));
+  }
+
+  @Test
+  void shouldPropagateInvalidStateTransition() {
+    User user = createUser();
+
+    user.disable();
+
+    when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+
+    assertThrows(
+        InvalidUserStateTransitionException.class, () -> userService.activate(user.getId()));
+  }
+
+  @Test
+  void shouldAuthenticateActiveUser() {
+    User user = createUser();
+
+    user.activate();
+
+    when(userRepository.findByUsername(user.getUsername())).thenReturn(Optional.of(user));
+
+    when(passwordEncoder.matches("SecurePassword123!", user.getPasswordHash())).thenReturn(true);
+    when(jwtService.generateAccessToken(user)).thenReturn("test-access-token");
+
+    LoginResponse response =
+        userService.authenticate(new LoginRequest(user.getUsername(), "SecurePassword123!"));
+
+    assertEquals(user.getId(), response.userId());
+    assertEquals(user.getUsername(), response.username());
+    assertEquals(UserStatus.ACTIVE, response.status());
+    assertNotNull(response.lastLoginAt());
+    assertEquals("test-access-token", response.accessToken());
+
+    verify(jwtService).generateAccessToken(user);
+  }
+
+  @Test
+  void shouldRejectAuthenticationWhenUsernameDoesNotExist() {
+    when(userRepository.findByUsername("99999999Z")).thenReturn(Optional.empty());
+
+    assertThrows(
+        InvalidCredentialsException.class,
+        () -> userService.authenticate(new LoginRequest("99999999Z", "SecurePassword123!")));
+  }
+
+  @Test
+  void shouldRejectAuthenticationWhenPasswordIsInvalid() {
+    User user = createUser();
+
+    user.activate();
+
+    when(userRepository.findByUsername(user.getUsername())).thenReturn(Optional.of(user));
+
+    when(passwordEncoder.matches("WrongPassword123!", user.getPasswordHash())).thenReturn(false);
+
+    assertThrows(
+        InvalidCredentialsException.class,
+        () -> userService.authenticate(new LoginRequest(user.getUsername(), "WrongPassword123!")));
+
+    verify(jwtService, never()).generateAccessToken(any(User.class));
+  }
+
+  @Test
+  void shouldRejectAuthenticationWhenUserIsNotActive() {
+    User user = createUser();
+
+    when(userRepository.findByUsername(user.getUsername())).thenReturn(Optional.of(user));
+
+    when(passwordEncoder.matches("SecurePassword123!", user.getPasswordHash())).thenReturn(true);
+
+    assertThrows(
+        InvalidUserStateTransitionException.class,
+        () -> userService.authenticate(new LoginRequest(user.getUsername(), "SecurePassword123!")));
+  }
 }

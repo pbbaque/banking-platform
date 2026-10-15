@@ -4,47 +4,63 @@ import com.pbbaque.banking.identity.dto.CreateUserRequest;
 import com.pbbaque.banking.identity.dto.UserResponse;
 import com.pbbaque.banking.identity.service.UserService;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.UUID;
-
+/** REST controller responsible for user management operations. */
 @RestController
 @RequestMapping("/api/v1/users")
 public class UserController {
 
-    private final UserService userService;
+  private final UserService userService;
 
-    public UserController(UserService userService) {
-        this.userService = userService;
-    }
+  public UserController(UserService userService) {
+    this.userService = userService;
+  }
 
-    @PostMapping
-    public ResponseEntity<UserResponse> create(
-            @Valid @RequestBody CreateUserRequest request) {
-        UserResponse response = userService.create(request);
+  /**
+   * Creates a new user.
+   *
+   * @param request user creation request
+   * @return created user
+   */
+  @PostMapping
+  public ResponseEntity<UserResponse> create(@Valid @RequestBody CreateUserRequest request) {
+    UserResponse response = userService.create(request);
 
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(response);
-    }
+    return ResponseEntity.status(HttpStatus.CREATED).body(response);
+  }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<UserResponse> getById(
-            @PathVariable UUID id) {
-        return ResponseEntity.ok(userService.getById(id));
-    }
+  @GetMapping("/{id}")
+  public ResponseEntity<UserResponse> getById(@PathVariable UUID id) {
+    return ResponseEntity.ok(userService.getById(id));
+  }
 
-    @GetMapping("/by-username/{username}")
-    public ResponseEntity<UserResponse> getByUsername(
-            @PathVariable String username) {
-        return ResponseEntity.ok(
-                userService.getByUsername(username));
-    }
+  @GetMapping("/by-username/{username}")
+  public ResponseEntity<UserResponse> getByUsername(@PathVariable String username) {
+    return ResponseEntity.ok(userService.getByUsername(username));
+  }
+
+  @PatchMapping("/{id}/activate")
+  public UserResponse activate(@PathVariable UUID id) {
+    return userService.activate(id);
+  }
+
+  @PatchMapping("/{id}/lock")
+  public UserResponse lock(@PathVariable UUID id) {
+    return userService.lock(id);
+  }
+
+  @PatchMapping("/{id}/disable")
+  public UserResponse disable(@PathVariable UUID id) {
+    return userService.disable(id);
+  }
 }

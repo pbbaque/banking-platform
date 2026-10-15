@@ -1,18 +1,18 @@
 package com.pbbaque.banking.identity.repository;
 
+import com.pbbaque.banking.identity.domain.User;
 import java.util.Optional;
 import java.util.UUID;
-
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import com.pbbaque.banking.identity.domain.User;
-
+/** Repository for accessing identity users. */
 public interface UserRepository extends JpaRepository<User, UUID> {
-    Optional<User> findByUsername(String username);
 
-    Optional<User> findByEmail(String email);
+  Optional<User> findByUsername(String username);
 
-    boolean existsByUsername(String username);
+  Optional<User> findByEmail(String email);
 
-    boolean existsByEmail(String email);
+  boolean existsByUsername(String username);
+
+  boolean existsByEmail(String email);
 }

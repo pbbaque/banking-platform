@@ -19,6 +19,9 @@ application-local.yaml
 application-local.properties
 **/application-local.properties
 
+# Local cryptographic keys
+**/local-keys/
+
 
 # =========================
 # Java / Maven
