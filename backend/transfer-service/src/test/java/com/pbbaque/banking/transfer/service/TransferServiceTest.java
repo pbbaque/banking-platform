@@ -1,21 +1,30 @@
 package com.pbbaque.banking.transfer.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pbbaque.banking.transfer.client.AccountClient;
+import com.pbbaque.banking.transfer.domain.OutboxEvent;
+import com.pbbaque.banking.transfer.domain.OutboxEventStatus;
 import com.pbbaque.banking.transfer.domain.Transfer;
 import com.pbbaque.banking.transfer.domain.TransferStatus;
+import com.pbbaque.banking.transfer.dto.AuditEventMessage;
 import com.pbbaque.banking.transfer.dto.CreateTransferRequest;
 import com.pbbaque.banking.transfer.exception.AccountServiceException;
 import com.pbbaque.banking.transfer.exception.IdempotencyConflictException;
 import com.pbbaque.banking.transfer.exception.TransferNotFoundException;
+import com.pbbaque.banking.transfer.repository.OutboxEventRepository;
 import com.pbbaque.banking.transfer.repository.TransferRepository;
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -23,9 +32,14 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 /** Unit tests for {@link TransferService}. */
 @ExtendWith(MockitoExtension.class)
@@ -45,23 +59,38 @@ class TransferServiceTest {
 
   @Mock private TransferRepository transferRepository;
 
+  @Mock private OutboxEventRepository outboxEventRepository;
+
   @Mock private AccountClient accountClient;
+
+  @Mock private PlatformTransactionManager transactionManager;
+
+  private ObjectMapper objectMapper;
 
   private TransferService transferService;
 
   @BeforeEach
   void setUp() {
-    transferService = new TransferService(transferRepository, accountClient);
+    objectMapper = new ObjectMapper().findAndRegisterModules();
+
+    transferService =
+        new TransferService(
+            transferRepository,
+            outboxEventRepository,
+            accountClient,
+            objectMapper,
+            transactionManager);
   }
 
   @Test
-  void shouldCreateCompletedTransfer() {
+  void shouldCreateCompletedTransferAndOutboxEvent() throws Exception {
     CreateTransferRequest request = createRequest();
 
     when(transferRepository.findByIdempotencyKey(IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
 
-    when(transferRepository.save(org.mockito.ArgumentMatchers.any(Transfer.class)))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+    stubTransferPersistence();
+    stubOutboxPersistence();
+    stubTransaction();
 
     doNothing().when(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT);
     doNothing().when(accountClient).credit(DESTINATION_ACCOUNT_ID, AMOUNT);
@@ -73,12 +102,41 @@ class TransferServiceTest {
     verify(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT);
     verify(accountClient).credit(DESTINATION_ACCOUNT_ID, AMOUNT);
 
-    verify(transferRepository, org.mockito.Mockito.times(2))
-        .save(org.mockito.ArgumentMatchers.any(Transfer.class));
+    verify(transferRepository, times(2)).save(any(Transfer.class));
+
+    OutboxEvent outboxEvent = captureOutboxEvent();
+
+    assertEquals(TRANSFER_ID, result.getId());
+    assertEquals(result.getId(), outboxEvent.getAggregateId());
+    assertEquals("TRANSFER_COMPLETED", outboxEvent.getEventType());
+    assertEquals(OutboxEventStatus.PENDING, outboxEvent.getStatus());
+    assertEquals(0, outboxEvent.getAttempts());
+    assertNull(outboxEvent.getLastError());
+    assertNull(outboxEvent.getPublishedAt());
+    assertNotNull(outboxEvent.getCreatedAt());
+    assertEquals(outboxEvent.getCreatedAt(), outboxEvent.getAvailableAt());
+
+    AuditEventMessage message =
+        objectMapper.readValue(outboxEvent.getPayload(), AuditEventMessage.class);
+
+    assertEquals(outboxEvent.getId(), message.eventId());
+    assertEquals("TRANSFER_COMPLETED", message.eventType());
+    assertEquals("TRANSFER", message.aggregateType());
+    assertEquals(TRANSFER_ID.toString(), message.aggregateId());
+    assertEquals("SUCCESS", message.outcome());
+    assertEquals("Transfer completed successfully", message.description());
+    assertNull(message.actorId());
+    assertNotNull(message.occurredAt());
+
+    assertEquals(SOURCE_ACCOUNT_ID.toString(), message.metadata().get("sourceAccountId"));
+    assertEquals(DESTINATION_ACCOUNT_ID.toString(), message.metadata().get("destinationAccountId"));
+    assertEquals("EUR", message.metadata().get("currency"));
+    assertEquals(IDEMPOTENCY_KEY, message.metadata().get("idempotencyKey"));
+    assertEquals("COMPLETED", message.metadata().get("status"));
   }
 
   @Test
-  void shouldReturnExistingTransferForSameIdempotencyKey() {
+  void shouldReturnExistingTransferForSameIdempotencyKeyWithoutCreatingOutboxEvent() {
     CreateTransferRequest request = createRequest();
 
     Transfer existingTransfer =
@@ -91,23 +149,22 @@ class TransferServiceTest {
 
     assertSame(existingTransfer, result);
 
-    verify(transferRepository, never()).save(org.mockito.ArgumentMatchers.any(Transfer.class));
+    verify(transferRepository, never()).save(any(Transfer.class));
+    verify(outboxEventRepository, never()).save(any(OutboxEvent.class));
 
-    verify(accountClient, never())
-        .debit(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
-
-    verify(accountClient, never())
-        .credit(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    verify(accountClient, never()).debit(any(), any());
+    verify(accountClient, never()).credit(any(), any());
   }
 
   @Test
-  void shouldFailTransferWhenDebitFails() {
+  void shouldFailTransferAndCreateOutboxEventWhenDebitFails() throws Exception {
     CreateTransferRequest request = createRequest();
 
     when(transferRepository.findByIdempotencyKey(IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
 
-    when(transferRepository.save(org.mockito.ArgumentMatchers.any(Transfer.class)))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+    stubTransferPersistence();
+    stubOutboxPersistence();
+    stubTransaction();
 
     doThrow(
             new AccountServiceException(
@@ -120,21 +177,35 @@ class TransferServiceTest {
     assertThrows(AccountServiceException.class, () -> transferService.createTransfer(request));
 
     verify(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT);
-
     verify(accountClient, never()).credit(DESTINATION_ACCOUNT_ID, AMOUNT);
 
-    verify(transferRepository, org.mockito.Mockito.times(2))
-        .save(org.mockito.ArgumentMatchers.any(Transfer.class));
+    verify(transferRepository, times(2)).save(any(Transfer.class));
+
+    OutboxEvent outboxEvent = captureOutboxEvent();
+
+    assertEquals(TRANSFER_ID, outboxEvent.getAggregateId());
+    assertEquals("TRANSFER_FAILED", outboxEvent.getEventType());
+    assertEquals(OutboxEventStatus.PENDING, outboxEvent.getStatus());
+
+    AuditEventMessage message =
+        objectMapper.readValue(outboxEvent.getPayload(), AuditEventMessage.class);
+
+    assertEquals("FAILURE", message.outcome());
+    assertEquals(
+        "Transfer failed because the source account could not be debited", message.description());
+    assertEquals("FAILED", message.metadata().get("status"));
   }
 
   @Test
-  void shouldCompensateSourceAccountWhenDestinationCreditFails() {
+  void shouldCompensateSourceAccountAndCreateOutboxEventWhenDestinationCreditFails()
+      throws Exception {
     CreateTransferRequest request = createRequest();
 
     when(transferRepository.findByIdempotencyKey(IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
 
-    when(transferRepository.save(org.mockito.ArgumentMatchers.any(Transfer.class)))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+    stubTransferPersistence();
+    stubOutboxPersistence();
+    stubTransaction();
 
     doNothing().when(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT);
 
@@ -154,18 +225,34 @@ class TransferServiceTest {
     verify(accountClient).credit(DESTINATION_ACCOUNT_ID, AMOUNT);
     verify(accountClient).credit(SOURCE_ACCOUNT_ID, AMOUNT);
 
-    verify(transferRepository, org.mockito.Mockito.times(2))
-        .save(org.mockito.ArgumentMatchers.any(Transfer.class));
+    verify(transferRepository, times(2)).save(any(Transfer.class));
+
+    OutboxEvent outboxEvent = captureOutboxEvent();
+
+    assertEquals(TRANSFER_ID, outboxEvent.getAggregateId());
+    assertEquals("TRANSFER_FAILED", outboxEvent.getEventType());
+    assertEquals(OutboxEventStatus.PENDING, outboxEvent.getStatus());
+
+    AuditEventMessage message =
+        objectMapper.readValue(outboxEvent.getPayload(), AuditEventMessage.class);
+
+    assertEquals("FAILURE", message.outcome());
+    assertEquals(
+        "Transfer failed because the destination account could not be credited; "
+            + "the source debit was compensated",
+        message.description());
+    assertEquals("FAILED", message.metadata().get("status"));
   }
 
   @Test
-  void shouldThrowWhenDestinationCreditAndCompensationFail() {
+  void shouldCreateOutboxEventWhenDestinationCreditAndCompensationFail() throws Exception {
     CreateTransferRequest request = createRequest();
 
     when(transferRepository.findByIdempotencyKey(IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
 
-    when(transferRepository.save(org.mockito.ArgumentMatchers.any(Transfer.class)))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+    stubTransferPersistence();
+    stubOutboxPersistence();
+    stubTransaction();
 
     doNothing().when(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT);
 
@@ -191,8 +278,21 @@ class TransferServiceTest {
     verify(accountClient).credit(DESTINATION_ACCOUNT_ID, AMOUNT);
     verify(accountClient).credit(SOURCE_ACCOUNT_ID, AMOUNT);
 
-    verify(transferRepository, org.mockito.Mockito.times(2))
-        .save(org.mockito.ArgumentMatchers.any(Transfer.class));
+    verify(transferRepository, times(2)).save(any(Transfer.class));
+
+    OutboxEvent outboxEvent = captureOutboxEvent();
+
+    assertEquals(TRANSFER_ID, outboxEvent.getAggregateId());
+    assertEquals("TRANSFER_FAILED", outboxEvent.getEventType());
+    assertEquals(OutboxEventStatus.PENDING, outboxEvent.getStatus());
+
+    AuditEventMessage message =
+        objectMapper.readValue(outboxEvent.getPayload(), AuditEventMessage.class);
+
+    assertEquals("FAILURE", message.outcome());
+    assertEquals(
+        "Transfer failed and the source account compensation also failed", message.description());
+    assertEquals("FAILED", message.metadata().get("status"));
   }
 
   @Test
@@ -235,7 +335,7 @@ class TransferServiceTest {
   }
 
   @Test
-  void shouldRejectSameIdempotencyKeyWithDifferentTransferData() {
+  void shouldRejectSameIdempotencyKeyWithDifferentTransferDataWithoutCreatingOutboxEvent() {
     CreateTransferRequest request =
         new CreateTransferRequest(
             SOURCE_ACCOUNT_ID,
@@ -252,13 +352,43 @@ class TransferServiceTest {
 
     assertThrows(IdempotencyConflictException.class, () -> transferService.createTransfer(request));
 
-    verify(transferRepository, never()).save(org.mockito.ArgumentMatchers.any(Transfer.class));
+    verify(transferRepository, never()).save(any(Transfer.class));
+    verify(outboxEventRepository, never()).save(any(OutboxEvent.class));
 
-    verify(accountClient, never())
-        .debit(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    verify(accountClient, never()).debit(any(), any());
+    verify(accountClient, never()).credit(any(), any());
+  }
 
-    verify(accountClient, never())
-        .credit(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+  private void stubTransferPersistence() {
+    when(transferRepository.save(any(Transfer.class)))
+        .thenAnswer(
+            invocation -> {
+              Transfer transfer = invocation.getArgument(0);
+
+              if (transfer.getId() == null) {
+                ReflectionTestUtils.setField(transfer, "id", TRANSFER_ID);
+              }
+
+              return transfer;
+            });
+  }
+
+  private void stubOutboxPersistence() {
+    when(outboxEventRepository.save(any(OutboxEvent.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+  }
+
+  private void stubTransaction() {
+    when(transactionManager.getTransaction(any(TransactionDefinition.class)))
+        .thenReturn(new SimpleTransactionStatus());
+  }
+
+  private OutboxEvent captureOutboxEvent() {
+    ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
+
+    verify(outboxEventRepository).save(captor.capture());
+
+    return captor.getValue();
   }
 
   private CreateTransferRequest createRequest() {
@@ -267,7 +397,11 @@ class TransferServiceTest {
   }
 
   private Transfer createTransfer() {
-    return Transfer.create(
-        SOURCE_ACCOUNT_ID, DESTINATION_ACCOUNT_ID, AMOUNT, "EUR", IDEMPOTENCY_KEY);
+    Transfer transfer =
+        Transfer.create(SOURCE_ACCOUNT_ID, DESTINATION_ACCOUNT_ID, AMOUNT, "EUR", IDEMPOTENCY_KEY);
+
+    ReflectionTestUtils.setField(transfer, "id", TRANSFER_ID);
+
+    return transfer;
   }
 }

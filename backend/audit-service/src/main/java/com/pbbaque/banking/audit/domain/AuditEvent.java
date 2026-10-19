@@ -12,7 +12,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
 
-/** Represents an immutable audit event recorded by the banking platform. */
+/** Represents an immutable audit event persisted by the audit service. */
 @Entity
 @Table(name = "AUDIT_EVENTS")
 public class AuditEvent {
@@ -61,7 +61,8 @@ public class AuditEvent {
       AuditOutcome outcome,
       String description,
       String metadata,
-      OffsetDateTime occurredAt) {
+      OffsetDateTime occurredAt,
+      OffsetDateTime createdAt) {
     this.id = id;
     this.eventType = eventType;
     this.aggregateType = aggregateType;
@@ -71,20 +72,21 @@ public class AuditEvent {
     this.description = description;
     this.metadata = metadata;
     this.occurredAt = occurredAt;
+    this.createdAt = createdAt;
   }
 
   /**
-   * Creates a new audit event.
+   * Creates a new audit event with an internally generated identifier.
    *
-   * @param eventType type of event being recorded
-   * @param aggregateType type of aggregate affected by the event
-   * @param aggregateId identifier of the affected aggregate
-   * @param actorId identifier of the actor responsible for the action, if available
-   * @param outcome result of the audited operation
-   * @param description optional human-readable description
-   * @param metadata optional structured metadata serialized as text
-   * @param occurredAt instant when the audited event occurred
-   * @return a new audit event
+   * @param eventType event type
+   * @param aggregateType aggregate type
+   * @param aggregateId aggregate identifier
+   * @param actorId actor identifier
+   * @param outcome event outcome
+   * @param description optional event description
+   * @param metadata optional serialized metadata
+   * @param occurredAt event occurrence timestamp
+   * @return new audit event
    */
   public static AuditEvent create(
       String eventType,
@@ -95,27 +97,66 @@ public class AuditEvent {
       String description,
       String metadata,
       OffsetDateTime occurredAt) {
+    return create(
+        UUID.randomUUID(),
+        eventType,
+        aggregateType,
+        aggregateId,
+        actorId,
+        outcome,
+        description,
+        metadata,
+        occurredAt);
+  }
 
-    String normalizedEventType = normalizeRequired(eventType, "eventType");
-    String normalizedAggregateType = normalizeRequired(aggregateType, "aggregateType");
-    String normalizedAggregateId = normalizeRequired(aggregateId, "aggregateId");
+  /**
+   * Creates a new audit event with a supplied identifier.
+   *
+   * <p>This factory is intended for externally produced events whose identifier must be preserved
+   * for idempotent processing.
+   *
+   * @param id event identifier
+   * @param eventType event type
+   * @param aggregateType aggregate type
+   * @param aggregateId aggregate identifier
+   * @param actorId actor identifier
+   * @param outcome event outcome
+   * @param description optional event description
+   * @param metadata optional serialized metadata
+   * @param occurredAt event occurrence timestamp
+   * @return new audit event
+   */
+  public static AuditEvent create(
+      UUID id,
+      String eventType,
+      String aggregateType,
+      String aggregateId,
+      UUID actorId,
+      AuditOutcome outcome,
+      String description,
+      String metadata,
+      OffsetDateTime occurredAt) {
 
-    AuditOutcome validatedOutcome = requireOutcome(outcome);
-    OffsetDateTime validatedOccurredAt = requireOccurredAt(occurredAt);
-
+    UUID normalizedId = requireNonNull(id, "id");
+    String normalizedEventType = requireNonBlank(eventType, "eventType");
+    String normalizedAggregateType = requireNonBlank(aggregateType, "aggregateType");
+    String normalizedAggregateId = requireNonBlank(aggregateId, "aggregateId");
+    AuditOutcome normalizedOutcome = requireNonNull(outcome, "outcome");
     String normalizedDescription = normalizeOptional(description);
     String normalizedMetadata = normalizeOptional(metadata);
+    OffsetDateTime normalizedOccurredAt = requireNonNull(occurredAt, "occurredAt");
 
     return new AuditEvent(
-        UUID.randomUUID(),
+        normalizedId,
         normalizedEventType,
         normalizedAggregateType,
         normalizedAggregateId,
         actorId,
-        validatedOutcome,
+        normalizedOutcome,
         normalizedDescription,
         normalizedMetadata,
-        validatedOccurredAt);
+        normalizedOccurredAt,
+        null);
   }
 
   @PrePersist
@@ -129,7 +170,7 @@ public class AuditEvent {
     }
   }
 
-  private static String normalizeRequired(String value, String fieldName) {
+  private static String requireNonBlank(String value, String fieldName) {
     if (value == null || value.isBlank()) {
       throw new IllegalArgumentException(fieldName + " must not be blank");
     }
@@ -137,29 +178,20 @@ public class AuditEvent {
     return value.trim();
   }
 
-  private static String normalizeOptional(String value) {
+  private static <T> T requireNonNull(T value, String fieldName) {
     if (value == null) {
+      throw new IllegalArgumentException(fieldName + " must not be null");
+    }
+
+    return value;
+  }
+
+  private static String normalizeOptional(String value) {
+    if (value == null || value.isBlank()) {
       return null;
     }
 
-    String normalized = value.trim();
-    return normalized.isEmpty() ? null : normalized;
-  }
-
-  private static AuditOutcome requireOutcome(AuditOutcome outcome) {
-    if (outcome == null) {
-      throw new IllegalArgumentException("outcome must not be null");
-    }
-
-    return outcome;
-  }
-
-  private static OffsetDateTime requireOccurredAt(OffsetDateTime occurredAt) {
-    if (occurredAt == null) {
-      throw new IllegalArgumentException("occurredAt must not be null");
-    }
-
-    return occurredAt;
+    return value.trim();
   }
 
   public UUID getId() {

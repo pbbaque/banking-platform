@@ -1,20 +1,28 @@
 package com.pbbaque.banking.audit.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pbbaque.banking.audit.domain.AuditEvent;
 import com.pbbaque.banking.audit.domain.AuditOutcome;
+import com.pbbaque.banking.audit.dto.AuditEventMessage;
 import com.pbbaque.banking.audit.dto.AuditEventResponse;
 import com.pbbaque.banking.audit.dto.CreateAuditEventRequest;
 import com.pbbaque.banking.audit.exception.AuditEventNotFoundException;
 import com.pbbaque.banking.audit.repository.AuditEventRepository;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,13 +36,23 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class AuditEventServiceTest {
 
+  private static final UUID EVENT_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
+  private static final UUID ACTOR_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+
+  private static final OffsetDateTime OCCURRED_AT =
+      OffsetDateTime.of(2026, 10, 19, 9, 13, 8, 0, ZoneOffset.UTC);
+
   @Mock private AuditEventRepository auditEventRepository;
+
+  private ObjectMapper objectMapper;
 
   private AuditEventService auditEventService;
 
   @BeforeEach
   void setUp() {
-    auditEventService = new AuditEventService(auditEventRepository);
+    objectMapper = new ObjectMapper().findAndRegisterModules();
+    auditEventService = new AuditEventService(auditEventRepository, objectMapper);
   }
 
   @Test
@@ -82,6 +100,93 @@ class AuditEventServiceTest {
     assertEquals(savedAuditEvent.getDescription(), response.description());
     assertEquals(savedAuditEvent.getMetadata(), response.metadata());
     assertEquals(savedAuditEvent.getOccurredAt(), response.occurredAt());
+  }
+
+  @Test
+  void shouldCreateAuditEventFromMessage() throws Exception {
+    AuditEventMessage message = createMessage();
+
+    when(auditEventRepository.existsById(EVENT_ID)).thenReturn(false);
+
+    when(auditEventRepository.save(any(AuditEvent.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    boolean created = auditEventService.createFromMessage(message);
+
+    assertTrue(created);
+
+    verify(auditEventRepository).existsById(EVENT_ID);
+
+    ArgumentCaptor<AuditEvent> captor = ArgumentCaptor.forClass(AuditEvent.class);
+    verify(auditEventRepository).save(captor.capture());
+
+    AuditEvent savedAuditEvent = captor.getValue();
+
+    assertEquals(EVENT_ID, savedAuditEvent.getId());
+    assertEquals("TRANSFER_COMPLETED", savedAuditEvent.getEventType());
+    assertEquals("TRANSFER", savedAuditEvent.getAggregateType());
+    assertEquals("transfer-123", savedAuditEvent.getAggregateId());
+    assertEquals(ACTOR_ID, savedAuditEvent.getActorId());
+    assertEquals(AuditOutcome.SUCCESS, savedAuditEvent.getOutcome());
+    assertEquals("Transfer completed successfully", savedAuditEvent.getDescription());
+    assertEquals(OCCURRED_AT, savedAuditEvent.getOccurredAt());
+
+    JsonNode metadata = objectMapper.readTree(savedAuditEvent.getMetadata());
+
+    assertEquals("11111111-1111-1111-1111-111111111111", metadata.get("sourceAccountId").asText());
+
+    assertEquals(
+        "22222222-2222-2222-2222-222222222222", metadata.get("destinationAccountId").asText());
+
+    assertEquals(0, new BigDecimal("25").compareTo(metadata.get("amount").decimalValue()));
+    assertEquals("EUR", metadata.get("currency").asText());
+    assertEquals("COMPLETED", metadata.get("status").asText());
+    assertEquals("e2e-outbox-kafka-001", metadata.get("idempotencyKey").asText());
+  }
+
+  @Test
+  void shouldIgnoreAlreadyProcessedMessage() {
+    AuditEventMessage message = createMessage();
+
+    when(auditEventRepository.existsById(EVENT_ID)).thenReturn(true);
+
+    boolean created = auditEventService.createFromMessage(message);
+
+    assertFalse(created);
+
+    verify(auditEventRepository).existsById(EVENT_ID);
+    verify(auditEventRepository, never()).save(any(AuditEvent.class));
+  }
+
+  @Test
+  void shouldPersistNullMetadataWhenMessageMetadataIsEmpty() {
+    AuditEventMessage message =
+        new AuditEventMessage(
+            EVENT_ID,
+            "TRANSFER_FAILED",
+            "TRANSFER",
+            "transfer-123",
+            null,
+            AuditOutcome.FAILURE,
+            "Transfer failed",
+            Map.of(),
+            OCCURRED_AT);
+
+    when(auditEventRepository.existsById(EVENT_ID)).thenReturn(false);
+
+    when(auditEventRepository.save(any(AuditEvent.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    boolean created = auditEventService.createFromMessage(message);
+
+    assertTrue(created);
+
+    ArgumentCaptor<AuditEvent> captor = ArgumentCaptor.forClass(AuditEvent.class);
+    verify(auditEventRepository).save(captor.capture());
+
+    assertEquals(EVENT_ID, captor.getValue().getId());
+    assertEquals(AuditOutcome.FAILURE, captor.getValue().getOutcome());
+    assertEquals(null, captor.getValue().getMetadata());
   }
 
   @Test
@@ -236,6 +341,25 @@ class AuditEventServiceTest {
 
     verify(auditEventRepository)
         .findAllByAggregateTypeAndAggregateId("TRANSFER", "missing-transfer");
+  }
+
+  private AuditEventMessage createMessage() {
+    return new AuditEventMessage(
+        EVENT_ID,
+        "TRANSFER_COMPLETED",
+        "TRANSFER",
+        "transfer-123",
+        ACTOR_ID,
+        AuditOutcome.SUCCESS,
+        "Transfer completed successfully",
+        Map.of(
+            "sourceAccountId", "11111111-1111-1111-1111-111111111111",
+            "destinationAccountId", "22222222-2222-2222-2222-222222222222",
+            "amount", new BigDecimal("25"),
+            "currency", "EUR",
+            "status", "COMPLETED",
+            "idempotencyKey", "e2e-outbox-kafka-001"),
+        OCCURRED_AT);
   }
 
   private AuditEvent createAuditEvent() {

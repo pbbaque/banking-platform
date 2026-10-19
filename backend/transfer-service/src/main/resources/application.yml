@@ -13,6 +13,15 @@ spring:
     hibernate:
       ddl-auto: validate
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+
 server:
   port: 8084
 
@@ -25,3 +34,17 @@ management:
 clients:
   account-service:
     base-url: ${ACCOUNT_SERVICE_URL:http://localhost:8083}
+
+messaging:
+  kafka:
+    topics:
+      audit-events:
+        name: ${AUDIT_EVENTS_TOPIC:banking.audit-events}
+        partitions: 3
+        replication-factor: 1
+
+    outbox:
+      batch-size: 100
+      send-timeout: 10s
+      retry-delay: 30s
+      polling-interval: 5s

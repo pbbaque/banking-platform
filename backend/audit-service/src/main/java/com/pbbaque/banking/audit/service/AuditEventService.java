@@ -1,6 +1,9 @@
 package com.pbbaque.banking.audit.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pbbaque.banking.audit.domain.AuditEvent;
+import com.pbbaque.banking.audit.dto.AuditEventMessage;
 import com.pbbaque.banking.audit.dto.AuditEventResponse;
 import com.pbbaque.banking.audit.dto.CreateAuditEventRequest;
 import com.pbbaque.banking.audit.exception.AuditEventNotFoundException;
@@ -15,14 +18,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuditEventService {
 
   private final AuditEventRepository auditEventRepository;
+  private final ObjectMapper objectMapper;
 
   /**
    * Creates a new audit event service.
    *
    * @param auditEventRepository audit event repository
+   * @param objectMapper JSON serializer
    */
-  public AuditEventService(AuditEventRepository auditEventRepository) {
+  public AuditEventService(AuditEventRepository auditEventRepository, ObjectMapper objectMapper) {
     this.auditEventRepository = auditEventRepository;
+    this.objectMapper = objectMapper.copy();
   }
 
   /**
@@ -47,6 +53,38 @@ public class AuditEventService {
     AuditEvent savedAuditEvent = auditEventRepository.save(auditEvent);
 
     return AuditEventResponse.from(savedAuditEvent);
+  }
+
+  /**
+   * Persists an audit event received from the message broker.
+   *
+   * <p>If an event with the same identifier already exists, the message is treated as already
+   * processed and no duplicate audit event is created.
+   *
+   * @param message consumed audit event message
+   * @return {@code true} when a new event was persisted, {@code false} when it already existed
+   */
+  @Transactional
+  public boolean createFromMessage(AuditEventMessage message) {
+    if (auditEventRepository.existsById(message.eventId())) {
+      return false;
+    }
+
+    AuditEvent auditEvent =
+        AuditEvent.create(
+            message.eventId(),
+            message.eventType(),
+            message.aggregateType(),
+            message.aggregateId(),
+            message.actorId(),
+            message.outcome(),
+            message.description(),
+            serializeMetadata(message),
+            message.occurredAt());
+
+    auditEventRepository.save(auditEvent);
+
+    return true;
   }
 
   /**
@@ -104,5 +142,17 @@ public class AuditEventService {
     return auditEventRepository.findAllByEventType(eventType).stream()
         .map(AuditEventResponse::from)
         .toList();
+  }
+
+  private String serializeMetadata(AuditEventMessage message) {
+    if (message.metadata().isEmpty()) {
+      return null;
+    }
+
+    try {
+      return objectMapper.writeValueAsString(message.metadata());
+    } catch (JsonProcessingException exception) {
+      throw new IllegalStateException("Unable to serialize audit event metadata", exception);
+    }
   }
 }
