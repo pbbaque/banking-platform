@@ -112,6 +112,7 @@
 				<configuration>
 					<systemPropertyVariables>
 						<spring.profiles.active>local</spring.profiles.active>
+						<spring.kafka.listener.auto-startup>false</spring.kafka.listener.auto-startup>
 					</systemPropertyVariables>
 				</configuration>
 
