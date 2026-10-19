@@ -9,10 +9,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.pbbaque.banking.account.domain.Account;
+import com.pbbaque.banking.account.domain.AccountOperation;
+import com.pbbaque.banking.account.domain.AccountOperationType;
 import com.pbbaque.banking.account.domain.AccountStatus;
 import com.pbbaque.banking.account.domain.AccountType;
 import com.pbbaque.banking.account.exception.AccountAlreadyExistsException;
 import com.pbbaque.banking.account.exception.AccountNotFoundException;
+import com.pbbaque.banking.account.exception.IdempotencyConflictException;
+import com.pbbaque.banking.account.repository.AccountOperationRepository;
 import com.pbbaque.banking.account.repository.AccountRepository;
 import java.math.BigDecimal;
 import java.util.List;
@@ -32,15 +36,22 @@ class AccountServiceTest {
 
   private static final UUID ACCOUNT_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
+  private static final UUID OTHER_ACCOUNT_ID =
+      UUID.fromString("44444444-4444-4444-4444-444444444444");
+
+  private static final UUID OPERATION_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
+
   private static final String IBAN = "ES9121000418450200051332";
 
   @Mock private AccountRepository accountRepository;
+
+  @Mock private AccountOperationRepository accountOperationRepository;
 
   private AccountService accountService;
 
   @BeforeEach
   void setUp() {
-    accountService = new AccountService(accountRepository);
+    accountService = new AccountService(accountRepository, accountOperationRepository);
   }
 
   @Test
@@ -161,24 +172,144 @@ class AccountServiceTest {
   }
 
   @Test
-  void shouldCreditAccount() {
+  void shouldCreditAccountAndRecordOperation() {
     Account account = createAccount();
+
+    when(accountOperationRepository.findById(OPERATION_ID)).thenReturn(Optional.empty());
     when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
 
-    Account result = accountService.credit(ACCOUNT_ID, new BigDecimal("100.00"));
+    Account result = accountService.credit(ACCOUNT_ID, new BigDecimal("100.00"), OPERATION_ID);
 
     assertEquals(new BigDecimal("100.00"), result.getBalance());
+
+    verify(accountOperationRepository).save(any(AccountOperation.class));
   }
 
   @Test
-  void shouldDebitAccount() {
+  void shouldDebitAccountAndRecordOperation() {
     Account account = createAccount();
     account.credit(new BigDecimal("100.00"));
+
+    when(accountOperationRepository.findById(OPERATION_ID)).thenReturn(Optional.empty());
     when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
 
-    Account result = accountService.debit(ACCOUNT_ID, new BigDecimal("25.00"));
+    Account result = accountService.debit(ACCOUNT_ID, new BigDecimal("25.00"), OPERATION_ID);
 
     assertEquals(new BigDecimal("75.00"), result.getBalance());
+
+    verify(accountOperationRepository).save(any(AccountOperation.class));
+  }
+
+  @Test
+  void shouldNotCreditAccountAgainWhenOperationIsReplayed() {
+    Account account = createAccount();
+    account.credit(new BigDecimal("100.00"));
+
+    AccountOperation existingOperation =
+        AccountOperation.create(
+            OPERATION_ID,
+            ACCOUNT_ID,
+            AccountOperationType.CREDIT,
+            new BigDecimal("100.00"),
+            new BigDecimal("100.00"));
+
+    when(accountOperationRepository.findById(OPERATION_ID))
+        .thenReturn(Optional.of(existingOperation));
+    when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+    Account result = accountService.credit(ACCOUNT_ID, new BigDecimal("100.00"), OPERATION_ID);
+
+    assertEquals(new BigDecimal("100.00"), result.getBalance());
+
+    verify(accountOperationRepository, never()).save(any(AccountOperation.class));
+  }
+
+  @Test
+  void shouldNotDebitAccountAgainWhenOperationIsReplayed() {
+    Account account = createAccount();
+    account.credit(new BigDecimal("100.00"));
+    account.debit(new BigDecimal("25.00"));
+
+    AccountOperation existingOperation =
+        AccountOperation.create(
+            OPERATION_ID,
+            ACCOUNT_ID,
+            AccountOperationType.DEBIT,
+            new BigDecimal("25.00"),
+            new BigDecimal("75.00"));
+
+    when(accountOperationRepository.findById(OPERATION_ID))
+        .thenReturn(Optional.of(existingOperation));
+    when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+    Account result = accountService.debit(ACCOUNT_ID, new BigDecimal("25.00"), OPERATION_ID);
+
+    assertEquals(new BigDecimal("75.00"), result.getBalance());
+
+    verify(accountOperationRepository, never()).save(any(AccountOperation.class));
+  }
+
+  @Test
+  void shouldRejectReplayWithDifferentAmount() {
+    AccountOperation existingOperation =
+        AccountOperation.create(
+            OPERATION_ID,
+            ACCOUNT_ID,
+            AccountOperationType.DEBIT,
+            new BigDecimal("25.00"),
+            new BigDecimal("75.00"));
+
+    when(accountOperationRepository.findById(OPERATION_ID))
+        .thenReturn(Optional.of(existingOperation));
+
+    assertThrows(
+        IdempotencyConflictException.class,
+        () -> accountService.debit(ACCOUNT_ID, new BigDecimal("50.00"), OPERATION_ID));
+
+    verify(accountRepository, never()).findById(any(UUID.class));
+    verify(accountOperationRepository, never()).save(any(AccountOperation.class));
+  }
+
+  @Test
+  void shouldRejectReplayWithDifferentAccount() {
+    AccountOperation existingOperation =
+        AccountOperation.create(
+            OPERATION_ID,
+            ACCOUNT_ID,
+            AccountOperationType.DEBIT,
+            new BigDecimal("25.00"),
+            new BigDecimal("75.00"));
+
+    when(accountOperationRepository.findById(OPERATION_ID))
+        .thenReturn(Optional.of(existingOperation));
+
+    assertThrows(
+        IdempotencyConflictException.class,
+        () -> accountService.debit(OTHER_ACCOUNT_ID, new BigDecimal("25.00"), OPERATION_ID));
+
+    verify(accountRepository, never()).findById(any(UUID.class));
+    verify(accountOperationRepository, never()).save(any(AccountOperation.class));
+  }
+
+  @Test
+  void shouldRejectReplayWithDifferentOperationType() {
+    AccountOperation existingOperation =
+        AccountOperation.create(
+            OPERATION_ID,
+            ACCOUNT_ID,
+            AccountOperationType.DEBIT,
+            new BigDecimal("25.00"),
+            new BigDecimal("75.00"));
+
+    when(accountOperationRepository.findById(OPERATION_ID))
+        .thenReturn(Optional.of(existingOperation));
+
+    assertThrows(
+        IdempotencyConflictException.class,
+        () -> accountService.credit(ACCOUNT_ID, new BigDecimal("25.00"), OPERATION_ID));
+
+    verify(accountRepository, never()).findById(any(UUID.class));
+    verify(accountOperationRepository, never()).save(any(AccountOperation.class));
   }
 
   private Account createAccount() {

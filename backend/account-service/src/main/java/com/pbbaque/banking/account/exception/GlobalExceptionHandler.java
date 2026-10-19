@@ -90,4 +90,26 @@ public class GlobalExceptionHandler {
 
     return ResponseEntity.status(status).body(error);
   }
+
+  /**
+   * Handles conflicts caused by reusing an idempotency key for a different operation.
+   *
+   * @param exception idempotency conflict
+   * @param request current HTTP request
+   * @return conflict error response
+   */
+  @ExceptionHandler(IdempotencyConflictException.class)
+  public ResponseEntity<ApiError> handleIdempotencyConflict(
+      IdempotencyConflictException exception, HttpServletRequest request) {
+
+    ApiError error =
+        new ApiError(
+            OffsetDateTime.now(ZoneOffset.UTC),
+            HttpStatus.CONFLICT.value(),
+            HttpStatus.CONFLICT.getReasonPhrase(),
+            exception.getMessage(),
+            request.getRequestURI());
+
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+  }
 }

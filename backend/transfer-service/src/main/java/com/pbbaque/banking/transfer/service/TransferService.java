@@ -32,6 +32,7 @@ public class TransferService {
   private final TransferRepository transferRepository;
   private final OutboxEventRepository outboxEventRepository;
   private final AccountClient accountClient;
+  private final AccountOperationIdFactory accountOperationIdFactory;
   private final ObjectMapper objectMapper;
   private final TransactionTemplate transactionTemplate;
 
@@ -41,6 +42,7 @@ public class TransferService {
    * @param transferRepository transfer repository
    * @param outboxEventRepository outbox event repository
    * @param accountClient client used to communicate with the account service
+   * @param accountOperationIdFactory factory used to generate stable account operation identifiers
    * @param objectMapper JSON serializer
    * @param transactionManager transaction manager used for atomic transfer and outbox persistence
    */
@@ -48,11 +50,13 @@ public class TransferService {
       TransferRepository transferRepository,
       OutboxEventRepository outboxEventRepository,
       AccountClient accountClient,
+      AccountOperationIdFactory accountOperationIdFactory,
       ObjectMapper objectMapper,
       PlatformTransactionManager transactionManager) {
     this.transferRepository = transferRepository;
     this.outboxEventRepository = outboxEventRepository;
     this.accountClient = accountClient;
+    this.accountOperationIdFactory = accountOperationIdFactory;
     this.objectMapper = objectMapper.copy();
     this.transactionTemplate = new TransactionTemplate(transactionManager);
   }
@@ -85,8 +89,11 @@ public class TransferService {
 
     transfer = transferRepository.save(transfer);
 
+    UUID transferId = requireTransferId(transfer);
+    UUID debitOperationId = accountOperationIdFactory.debit(transferId);
+
     try {
-      accountClient.debit(transfer.getSourceAccountId(), transfer.getAmount());
+      accountClient.debit(transfer.getSourceAccountId(), transfer.getAmount(), debitOperationId);
     } catch (AccountServiceException exception) {
       transfer.fail("Unable to debit source account");
 
@@ -99,11 +106,13 @@ public class TransferService {
       throw exception;
     }
 
+    UUID creditOperationId = accountOperationIdFactory.credit(transferId);
+
     try {
-      accountClient.credit(transfer.getDestinationAccountId(), transfer.getAmount());
+      accountClient.credit(
+          transfer.getDestinationAccountId(), transfer.getAmount(), creditOperationId);
     } catch (AccountServiceException creditException) {
-      compensateSourceAccount(transfer, creditException);
-      throw creditException;
+      return compensateSourceAccount(transfer, creditException);
     }
 
     transfer.complete();
@@ -136,15 +145,19 @@ public class TransferService {
         .orElseThrow(() -> new TransferNotFoundException(idempotencyKey));
   }
 
-  private void compensateSourceAccount(
+  private Transfer compensateSourceAccount(
       Transfer transfer, AccountServiceException originalException) {
 
+    UUID transferId = requireTransferId(transfer);
+    UUID compensationOperationId = accountOperationIdFactory.compensation(transferId);
+
     try {
-      accountClient.credit(transfer.getSourceAccountId(), transfer.getAmount());
+      accountClient.credit(
+          transfer.getSourceAccountId(), transfer.getAmount(), compensationOperationId);
 
       transfer.fail("Destination account could not be credited; source debit was compensated");
 
-      persistTransferWithAudit(
+      return persistTransferWithAudit(
           transfer,
           FAILED_EVENT_TYPE,
           "FAILURE",
@@ -167,6 +180,7 @@ public class TransferService {
   private Transfer persistTransferWithAudit(
       Transfer transfer, String eventType, String outcome, String description) {
 
+    UUID transferId = requireTransferId(transfer);
     UUID eventId = UUID.randomUUID();
     OffsetDateTime occurredAt = OffsetDateTime.now(ZoneOffset.UTC);
 
@@ -175,7 +189,7 @@ public class TransferService {
             eventId,
             eventType,
             AGGREGATE_TYPE,
-            transfer.getId().toString(),
+            transferId.toString(),
             null,
             outcome,
             description,
@@ -185,7 +199,7 @@ public class TransferService {
     String payload = serializeEvent(event);
 
     OutboxEvent outboxEvent =
-        OutboxEvent.create(eventId, transfer.getId(), eventType, payload, occurredAt);
+        OutboxEvent.create(eventId, transferId, eventType, payload, occurredAt);
 
     Transfer persistedTransfer =
         transactionTemplate.execute(
@@ -221,6 +235,16 @@ public class TransferService {
     } catch (JsonProcessingException exception) {
       throw new IllegalStateException("Unable to serialize transfer audit event", exception);
     }
+  }
+
+  private UUID requireTransferId(Transfer transfer) {
+    UUID transferId = transfer.getId();
+
+    if (transferId == null) {
+      throw new IllegalStateException("Persisted transfer has no identifier");
+    }
+
+    return transferId;
   }
 
   private void validateIdempotentRequest(Transfer existingTransfer, CreateTransferRequest request) {

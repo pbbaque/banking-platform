@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -126,27 +127,35 @@ public class AccountController {
    * Credits funds to an account.
    *
    * @param id account identifier
+   * @param operationId unique identifier used to make the operation idempotent
    * @param request amount payload
    * @return updated account
    */
   @PostMapping("/{id}/credit")
   public ResponseEntity<AccountResponse> credit(
-      @PathVariable UUID id, @Valid @RequestBody AmountRequest request) {
+      @PathVariable UUID id,
+      @RequestHeader("Idempotency-Key") UUID operationId,
+      @Valid @RequestBody AmountRequest request) {
 
-    return ResponseEntity.ok(AccountResponse.from(accountService.credit(id, request.amount())));
+    return ResponseEntity.ok(
+        AccountResponse.from(accountService.credit(id, request.amount(), operationId)));
   }
 
   /**
    * Debits funds from an account.
    *
    * @param id account identifier
+   * @param operationId unique identifier used to make the operation idempotent
    * @param request amount payload
    * @return updated account
    */
   @PostMapping("/{id}/debit")
   public ResponseEntity<AccountResponse> debit(
-      @PathVariable UUID id, @Valid @RequestBody AmountRequest request) {
+      @PathVariable UUID id,
+      @RequestHeader("Idempotency-Key") UUID operationId,
+      @Valid @RequestBody AmountRequest request) {
 
-    return ResponseEntity.ok(AccountResponse.from(accountService.debit(id, request.amount())));
+    return ResponseEntity.ok(
+        AccountResponse.from(accountService.debit(id, request.amount(), operationId)));
   }
 }

@@ -30,6 +30,8 @@ class AccountControllerTest {
 
   private static final UUID CUSTOMER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
+  private static final UUID OPERATION_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
+
   private static final String IBAN = "ES9121000418450200051332";
 
   @Autowired private MockMvc mockMvc;
@@ -137,13 +139,15 @@ class AccountControllerTest {
     Account account = createAccount();
     account.credit(new BigDecimal("100.00"));
 
-    when(accountService.credit(ACCOUNT_ID, new BigDecimal("100.00"))).thenReturn(account);
+    when(accountService.credit(ACCOUNT_ID, new BigDecimal("100.00"), OPERATION_ID))
+        .thenReturn(account);
 
     AmountRequest request = new AmountRequest(new BigDecimal("100.00"));
 
     mockMvc
         .perform(
             post("/api/accounts/{id}/credit", ACCOUNT_ID)
+                .header("Idempotency-Key", OPERATION_ID.toString())
                 .contentType("application/json")
                 .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isOk())
@@ -156,8 +160,23 @@ class AccountControllerTest {
     account.credit(new BigDecimal("100.00"));
     account.debit(new BigDecimal("25.00"));
 
-    when(accountService.debit(ACCOUNT_ID, new BigDecimal("25.00"))).thenReturn(account);
+    when(accountService.debit(ACCOUNT_ID, new BigDecimal("25.00"), OPERATION_ID))
+        .thenReturn(account);
 
+    AmountRequest request = new AmountRequest(new BigDecimal("25.00"));
+
+    mockMvc
+        .perform(
+            post("/api/accounts/{id}/debit", ACCOUNT_ID)
+                .header("Idempotency-Key", OPERATION_ID.toString())
+                .contentType("application/json")
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.balance").value(75.00));
+  }
+
+  @Test
+  void shouldRejectMissingIdempotencyKey() throws Exception {
     AmountRequest request = new AmountRequest(new BigDecimal("25.00"));
 
     mockMvc
@@ -165,8 +184,7 @@ class AccountControllerTest {
             post("/api/accounts/{id}/debit", ACCOUNT_ID)
                 .contentType("application/json")
                 .content(objectMapper.writeValueAsString(request)))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.balance").value(75.00));
+        .andExpect(status().isBadRequest());
   }
 
   @Test
@@ -188,6 +206,7 @@ class AccountControllerTest {
     mockMvc
         .perform(
             post("/api/accounts/{id}/credit", ACCOUNT_ID)
+                .header("Idempotency-Key", OPERATION_ID.toString())
                 .contentType("application/json")
                 .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isBadRequest());

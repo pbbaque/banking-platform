@@ -30,6 +30,8 @@ class GlobalExceptionHandlerTest {
 
   private static final UUID CUSTOMER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
+  private static final UUID OPERATION_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
+
   private static final String IBAN = "ES9121000418450200051332";
 
   @Autowired private MockMvc mockMvc;
@@ -74,7 +76,7 @@ class GlobalExceptionHandlerTest {
 
   @Test
   void shouldReturnConflictWhenAccountIsNotActive() throws Exception {
-    when(accountService.debit(ACCOUNT_ID, new BigDecimal("10.00")))
+    when(accountService.debit(ACCOUNT_ID, new BigDecimal("10.00"), OPERATION_ID))
         .thenThrow(new AccountNotActiveException("Only active accounts can send funds"));
 
     AmountRequest request = new AmountRequest(new BigDecimal("10.00"));
@@ -82,6 +84,7 @@ class GlobalExceptionHandlerTest {
     mockMvc
         .perform(
             post("/api/accounts/{id}/debit", ACCOUNT_ID)
+                .header("Idempotency-Key", OPERATION_ID.toString())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isConflict())
@@ -91,7 +94,7 @@ class GlobalExceptionHandlerTest {
 
   @Test
   void shouldReturnConflictWhenFundsAreInsufficient() throws Exception {
-    when(accountService.debit(ACCOUNT_ID, new BigDecimal("100.00")))
+    when(accountService.debit(ACCOUNT_ID, new BigDecimal("100.00"), OPERATION_ID))
         .thenThrow(new InsufficientFundsException("Insufficient funds"));
 
     AmountRequest request = new AmountRequest(new BigDecimal("100.00"));
@@ -99,11 +102,36 @@ class GlobalExceptionHandlerTest {
     mockMvc
         .perform(
             post("/api/accounts/{id}/debit", ACCOUNT_ID)
+                .header("Idempotency-Key", OPERATION_ID.toString())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.status").value(409))
         .andExpect(jsonPath("$.message").value("Insufficient funds"));
+  }
+
+  @Test
+  void shouldReturnConflictWhenIdempotencyKeyIsReusedForDifferentOperation() throws Exception {
+    when(accountService.debit(ACCOUNT_ID, new BigDecimal("25.00"), OPERATION_ID))
+        .thenThrow(
+            new IdempotencyConflictException(
+                "Idempotency key was already used for a different account operation"));
+
+    AmountRequest request = new AmountRequest(new BigDecimal("25.00"));
+
+    mockMvc
+        .perform(
+            post("/api/accounts/{id}/debit", ACCOUNT_ID)
+                .header("Idempotency-Key", OPERATION_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.status").value(409))
+        .andExpect(jsonPath("$.error").value("Conflict"))
+        .andExpect(
+            jsonPath("$.message")
+                .value("Idempotency key was already used for a different account operation"))
+        .andExpect(jsonPath("$.path").value("/api/accounts/" + ACCOUNT_ID + "/debit"));
   }
 
   @Test
@@ -113,6 +141,7 @@ class GlobalExceptionHandlerTest {
     mockMvc
         .perform(
             post("/api/accounts/{id}/credit", ACCOUNT_ID)
+                .header("Idempotency-Key", OPERATION_ID.toString())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isBadRequest())

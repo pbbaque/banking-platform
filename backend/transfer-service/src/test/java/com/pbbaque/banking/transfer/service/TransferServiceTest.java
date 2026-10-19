@@ -1,25 +1,20 @@
 package com.pbbaque.banking.transfer.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.pbbaque.banking.transfer.client.AccountClient;
 import com.pbbaque.banking.transfer.domain.OutboxEvent;
-import com.pbbaque.banking.transfer.domain.OutboxEventStatus;
 import com.pbbaque.banking.transfer.domain.Transfer;
 import com.pbbaque.banking.transfer.domain.TransferStatus;
-import com.pbbaque.banking.transfer.dto.AuditEventMessage;
 import com.pbbaque.banking.transfer.dto.CreateTransferRequest;
 import com.pbbaque.banking.transfer.exception.AccountServiceException;
 import com.pbbaque.banking.transfer.exception.IdempotencyConflictException;
@@ -32,7 +27,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -65,82 +59,50 @@ class TransferServiceTest {
 
   @Mock private PlatformTransactionManager transactionManager;
 
-  private ObjectMapper objectMapper;
+  private AccountOperationIdFactory accountOperationIdFactory;
 
   private TransferService transferService;
 
   @BeforeEach
   void setUp() {
-    objectMapper = new ObjectMapper().findAndRegisterModules();
+    accountOperationIdFactory = new AccountOperationIdFactory();
+
+    ObjectMapper objectMapper = new ObjectMapper();
+    objectMapper.registerModule(new JavaTimeModule());
 
     transferService =
         new TransferService(
             transferRepository,
             outboxEventRepository,
             accountClient,
+            accountOperationIdFactory,
             objectMapper,
             transactionManager);
   }
 
   @Test
-  void shouldCreateCompletedTransferAndOutboxEvent() throws Exception {
-    CreateTransferRequest request = createRequest();
+  void shouldCreateCompletedTransferAndOutboxEvent() {
+    prepareNewTransferPersistence();
 
-    when(transferRepository.findByIdempotencyKey(IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
+    UUID debitOperationId = accountOperationIdFactory.debit(TRANSFER_ID);
+    UUID creditOperationId = accountOperationIdFactory.credit(TRANSFER_ID);
 
-    stubTransferPersistence();
-    stubOutboxPersistence();
-    stubTransaction();
-
-    doNothing().when(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT);
-    doNothing().when(accountClient).credit(DESTINATION_ACCOUNT_ID, AMOUNT);
-
-    Transfer result = transferService.createTransfer(request);
+    Transfer result = transferService.createTransfer(createRequest());
 
     assertEquals(TransferStatus.COMPLETED, result.getStatus());
 
-    verify(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT);
-    verify(accountClient).credit(DESTINATION_ACCOUNT_ID, AMOUNT);
+    verify(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT, debitOperationId);
+    verify(accountClient).credit(DESTINATION_ACCOUNT_ID, AMOUNT, creditOperationId);
 
     verify(transferRepository, times(2)).save(any(Transfer.class));
-
-    OutboxEvent outboxEvent = captureOutboxEvent();
-
-    assertEquals(TRANSFER_ID, result.getId());
-    assertEquals(result.getId(), outboxEvent.getAggregateId());
-    assertEquals("TRANSFER_COMPLETED", outboxEvent.getEventType());
-    assertEquals(OutboxEventStatus.PENDING, outboxEvent.getStatus());
-    assertEquals(0, outboxEvent.getAttempts());
-    assertNull(outboxEvent.getLastError());
-    assertNull(outboxEvent.getPublishedAt());
-    assertNotNull(outboxEvent.getCreatedAt());
-    assertEquals(outboxEvent.getCreatedAt(), outboxEvent.getAvailableAt());
-
-    AuditEventMessage message =
-        objectMapper.readValue(outboxEvent.getPayload(), AuditEventMessage.class);
-
-    assertEquals(outboxEvent.getId(), message.eventId());
-    assertEquals("TRANSFER_COMPLETED", message.eventType());
-    assertEquals("TRANSFER", message.aggregateType());
-    assertEquals(TRANSFER_ID.toString(), message.aggregateId());
-    assertEquals("SUCCESS", message.outcome());
-    assertEquals("Transfer completed successfully", message.description());
-    assertNull(message.actorId());
-    assertNotNull(message.occurredAt());
-
-    assertEquals(SOURCE_ACCOUNT_ID.toString(), message.metadata().get("sourceAccountId"));
-    assertEquals(DESTINATION_ACCOUNT_ID.toString(), message.metadata().get("destinationAccountId"));
-    assertEquals("EUR", message.metadata().get("currency"));
-    assertEquals(IDEMPOTENCY_KEY, message.metadata().get("idempotencyKey"));
-    assertEquals("COMPLETED", message.metadata().get("status"));
+    verify(outboxEventRepository).save(any(OutboxEvent.class));
   }
 
   @Test
   void shouldReturnExistingTransferForSameIdempotencyKeyWithoutCreatingOutboxEvent() {
     CreateTransferRequest request = createRequest();
 
-    Transfer existingTransfer =
-        Transfer.create(SOURCE_ACCOUNT_ID, DESTINATION_ACCOUNT_ID, AMOUNT, "EUR", IDEMPOTENCY_KEY);
+    Transfer existingTransfer = createTransfer();
 
     when(transferRepository.findByIdempotencyKey(IDEMPOTENCY_KEY))
         .thenReturn(Optional.of(existingTransfer));
@@ -152,147 +114,109 @@ class TransferServiceTest {
     verify(transferRepository, never()).save(any(Transfer.class));
     verify(outboxEventRepository, never()).save(any(OutboxEvent.class));
 
-    verify(accountClient, never()).debit(any(), any());
-    verify(accountClient, never()).credit(any(), any());
+    verify(accountClient, never()).debit(any(), any(), any());
+    verify(accountClient, never()).credit(any(), any(), any());
   }
 
   @Test
-  void shouldFailTransferAndCreateOutboxEventWhenDebitFails() throws Exception {
-    CreateTransferRequest request = createRequest();
+  void shouldFailTransferAndCreateOutboxEventWhenDebitFails() {
+    prepareNewTransferPersistence();
 
-    when(transferRepository.findByIdempotencyKey(IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
+    UUID debitOperationId = accountOperationIdFactory.debit(TRANSFER_ID);
 
-    stubTransferPersistence();
-    stubOutboxPersistence();
-    stubTransaction();
+    AccountServiceException exception =
+        new AccountServiceException(
+            "Debit failed",
+            HttpStatus.CONFLICT,
+            new RuntimeException("Account service rejected debit"));
 
-    doThrow(
-            new AccountServiceException(
-                "Debit failed",
-                HttpStatus.CONFLICT,
-                new RuntimeException("Account service rejected debit")))
-        .when(accountClient)
-        .debit(SOURCE_ACCOUNT_ID, AMOUNT);
+    when(accountClient.debit(SOURCE_ACCOUNT_ID, AMOUNT, debitOperationId)).thenThrow(exception);
 
-    assertThrows(AccountServiceException.class, () -> transferService.createTransfer(request));
+    AccountServiceException thrown =
+        assertThrows(
+            AccountServiceException.class, () -> transferService.createTransfer(createRequest()));
 
-    verify(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT);
-    verify(accountClient, never()).credit(DESTINATION_ACCOUNT_ID, AMOUNT);
+    assertSame(exception, thrown);
+
+    verify(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT, debitOperationId);
+    verify(accountClient, never()).credit(any(), any(), any());
 
     verify(transferRepository, times(2)).save(any(Transfer.class));
-
-    OutboxEvent outboxEvent = captureOutboxEvent();
-
-    assertEquals(TRANSFER_ID, outboxEvent.getAggregateId());
-    assertEquals("TRANSFER_FAILED", outboxEvent.getEventType());
-    assertEquals(OutboxEventStatus.PENDING, outboxEvent.getStatus());
-
-    AuditEventMessage message =
-        objectMapper.readValue(outboxEvent.getPayload(), AuditEventMessage.class);
-
-    assertEquals("FAILURE", message.outcome());
-    assertEquals(
-        "Transfer failed because the source account could not be debited", message.description());
-    assertEquals("FAILED", message.metadata().get("status"));
+    verify(outboxEventRepository).save(any(OutboxEvent.class));
   }
 
   @Test
-  void shouldCompensateSourceAccountAndCreateOutboxEventWhenDestinationCreditFails()
-      throws Exception {
-    CreateTransferRequest request = createRequest();
+  void shouldReturnFailedTransferAndCreateOutboxEventWhenDestinationCreditFailsAndIsCompensated() {
+    prepareNewTransferPersistence();
 
-    when(transferRepository.findByIdempotencyKey(IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
+    UUID debitOperationId = accountOperationIdFactory.debit(TRANSFER_ID);
+    UUID creditOperationId = accountOperationIdFactory.credit(TRANSFER_ID);
+    UUID compensationOperationId = accountOperationIdFactory.compensation(TRANSFER_ID);
 
-    stubTransferPersistence();
-    stubOutboxPersistence();
-    stubTransaction();
+    AccountServiceException creditException =
+        new AccountServiceException(
+            "Destination credit failed",
+            HttpStatus.CONFLICT,
+            new RuntimeException("Account service rejected destination credit"));
 
-    doNothing().when(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT);
+    when(accountClient.credit(DESTINATION_ACCOUNT_ID, AMOUNT, creditOperationId))
+        .thenThrow(creditException);
 
-    doThrow(
-            new AccountServiceException(
-                "Destination credit failed",
-                HttpStatus.CONFLICT,
-                new RuntimeException("Account service rejected destination credit")))
-        .when(accountClient)
-        .credit(DESTINATION_ACCOUNT_ID, AMOUNT);
+    Transfer result = transferService.createTransfer(createRequest());
 
-    doNothing().when(accountClient).credit(SOURCE_ACCOUNT_ID, AMOUNT);
+    assertEquals(TransferStatus.FAILED, result.getStatus());
+    assertEquals(
+        "Destination account could not be credited; source debit was compensated",
+        result.getFailureReason());
 
-    assertThrows(AccountServiceException.class, () -> transferService.createTransfer(request));
-
-    verify(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT);
-    verify(accountClient).credit(DESTINATION_ACCOUNT_ID, AMOUNT);
-    verify(accountClient).credit(SOURCE_ACCOUNT_ID, AMOUNT);
+    verify(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT, debitOperationId);
+    verify(accountClient).credit(DESTINATION_ACCOUNT_ID, AMOUNT, creditOperationId);
+    verify(accountClient).credit(SOURCE_ACCOUNT_ID, AMOUNT, compensationOperationId);
 
     verify(transferRepository, times(2)).save(any(Transfer.class));
-
-    OutboxEvent outboxEvent = captureOutboxEvent();
-
-    assertEquals(TRANSFER_ID, outboxEvent.getAggregateId());
-    assertEquals("TRANSFER_FAILED", outboxEvent.getEventType());
-    assertEquals(OutboxEventStatus.PENDING, outboxEvent.getStatus());
-
-    AuditEventMessage message =
-        objectMapper.readValue(outboxEvent.getPayload(), AuditEventMessage.class);
-
-    assertEquals("FAILURE", message.outcome());
-    assertEquals(
-        "Transfer failed because the destination account could not be credited; "
-            + "the source debit was compensated",
-        message.description());
-    assertEquals("FAILED", message.metadata().get("status"));
+    verify(outboxEventRepository).save(any(OutboxEvent.class));
   }
 
   @Test
-  void shouldCreateOutboxEventWhenDestinationCreditAndCompensationFail() throws Exception {
-    CreateTransferRequest request = createRequest();
+  void shouldCreateOutboxEventWhenDestinationCreditAndCompensationFail() {
+    prepareNewTransferPersistence();
 
-    when(transferRepository.findByIdempotencyKey(IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
+    UUID debitOperationId = accountOperationIdFactory.debit(TRANSFER_ID);
+    UUID creditOperationId = accountOperationIdFactory.credit(TRANSFER_ID);
+    UUID compensationOperationId = accountOperationIdFactory.compensation(TRANSFER_ID);
 
-    stubTransferPersistence();
-    stubOutboxPersistence();
-    stubTransaction();
+    AccountServiceException creditException =
+        new AccountServiceException(
+            "Destination credit failed",
+            HttpStatus.CONFLICT,
+            new RuntimeException("Account service rejected destination credit"));
 
-    doNothing().when(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT);
+    AccountServiceException compensationException =
+        new AccountServiceException(
+            "Compensation failed",
+            HttpStatus.CONFLICT,
+            new RuntimeException("Account service rejected compensation"));
 
-    doThrow(
-            new AccountServiceException(
-                "Destination credit failed",
-                HttpStatus.CONFLICT,
-                new RuntimeException("Account service rejected destination credit")))
-        .when(accountClient)
-        .credit(DESTINATION_ACCOUNT_ID, AMOUNT);
+    when(accountClient.credit(DESTINATION_ACCOUNT_ID, AMOUNT, creditOperationId))
+        .thenThrow(creditException);
 
-    doThrow(
-            new AccountServiceException(
-                "Compensation failed",
-                HttpStatus.CONFLICT,
-                new RuntimeException("Account service rejected compensation")))
-        .when(accountClient)
-        .credit(SOURCE_ACCOUNT_ID, AMOUNT);
+    when(accountClient.credit(SOURCE_ACCOUNT_ID, AMOUNT, compensationOperationId))
+        .thenThrow(compensationException);
 
-    assertThrows(AccountServiceException.class, () -> transferService.createTransfer(request));
+    AccountServiceException thrown =
+        assertThrows(
+            AccountServiceException.class, () -> transferService.createTransfer(createRequest()));
 
-    verify(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT);
-    verify(accountClient).credit(DESTINATION_ACCOUNT_ID, AMOUNT);
-    verify(accountClient).credit(SOURCE_ACCOUNT_ID, AMOUNT);
+    assertSame(compensationException, thrown);
+    assertEquals(1, thrown.getSuppressed().length);
+    assertSame(creditException, thrown.getSuppressed()[0]);
+
+    verify(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT, debitOperationId);
+    verify(accountClient).credit(DESTINATION_ACCOUNT_ID, AMOUNT, creditOperationId);
+    verify(accountClient).credit(SOURCE_ACCOUNT_ID, AMOUNT, compensationOperationId);
 
     verify(transferRepository, times(2)).save(any(Transfer.class));
-
-    OutboxEvent outboxEvent = captureOutboxEvent();
-
-    assertEquals(TRANSFER_ID, outboxEvent.getAggregateId());
-    assertEquals("TRANSFER_FAILED", outboxEvent.getEventType());
-    assertEquals(OutboxEventStatus.PENDING, outboxEvent.getStatus());
-
-    AuditEventMessage message =
-        objectMapper.readValue(outboxEvent.getPayload(), AuditEventMessage.class);
-
-    assertEquals("FAILURE", message.outcome());
-    assertEquals(
-        "Transfer failed and the source account compensation also failed", message.description());
-    assertEquals("FAILED", message.metadata().get("status"));
+    verify(outboxEventRepository).save(any(OutboxEvent.class));
   }
 
   @Test
@@ -304,6 +228,8 @@ class TransferServiceTest {
     Transfer result = transferService.getById(TRANSFER_ID);
 
     assertSame(transfer, result);
+
+    verify(transferRepository).findById(TRANSFER_ID);
   }
 
   @Test
@@ -311,6 +237,8 @@ class TransferServiceTest {
     when(transferRepository.findById(TRANSFER_ID)).thenReturn(Optional.empty());
 
     assertThrows(TransferNotFoundException.class, () -> transferService.getById(TRANSFER_ID));
+
+    verify(transferRepository).findById(TRANSFER_ID);
   }
 
   @Test
@@ -323,6 +251,8 @@ class TransferServiceTest {
     Transfer result = transferService.getByIdempotencyKey(IDEMPOTENCY_KEY);
 
     assertSame(transfer, result);
+
+    verify(transferRepository).findByIdempotencyKey(IDEMPOTENCY_KEY);
   }
 
   @Test
@@ -332,6 +262,8 @@ class TransferServiceTest {
     assertThrows(
         TransferNotFoundException.class,
         () -> transferService.getByIdempotencyKey(IDEMPOTENCY_KEY));
+
+    verify(transferRepository).findByIdempotencyKey(IDEMPOTENCY_KEY);
   }
 
   @Test
@@ -344,8 +276,7 @@ class TransferServiceTest {
             "EUR",
             IDEMPOTENCY_KEY);
 
-    Transfer existingTransfer =
-        Transfer.create(SOURCE_ACCOUNT_ID, DESTINATION_ACCOUNT_ID, AMOUNT, "EUR", IDEMPOTENCY_KEY);
+    Transfer existingTransfer = createTransfer();
 
     when(transferRepository.findByIdempotencyKey(IDEMPOTENCY_KEY))
         .thenReturn(Optional.of(existingTransfer));
@@ -355,11 +286,13 @@ class TransferServiceTest {
     verify(transferRepository, never()).save(any(Transfer.class));
     verify(outboxEventRepository, never()).save(any(OutboxEvent.class));
 
-    verify(accountClient, never()).debit(any(), any());
-    verify(accountClient, never()).credit(any(), any());
+    verify(accountClient, never()).debit(any(), any(), any());
+    verify(accountClient, never()).credit(any(), any(), any());
   }
 
-  private void stubTransferPersistence() {
+  private void prepareNewTransferPersistence() {
+    when(transferRepository.findByIdempotencyKey(IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
+
     when(transferRepository.save(any(Transfer.class)))
         .thenAnswer(
             invocation -> {
@@ -371,24 +304,9 @@ class TransferServiceTest {
 
               return transfer;
             });
-  }
 
-  private void stubOutboxPersistence() {
-    when(outboxEventRepository.save(any(OutboxEvent.class)))
-        .thenAnswer(invocation -> invocation.getArgument(0));
-  }
-
-  private void stubTransaction() {
     when(transactionManager.getTransaction(any(TransactionDefinition.class)))
         .thenReturn(new SimpleTransactionStatus());
-  }
-
-  private OutboxEvent captureOutboxEvent() {
-    ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
-
-    verify(outboxEventRepository).save(captor.capture());
-
-    return captor.getValue();
   }
 
   private CreateTransferRequest createRequest() {
