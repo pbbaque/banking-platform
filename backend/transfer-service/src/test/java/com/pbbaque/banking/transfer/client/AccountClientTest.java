@@ -30,6 +30,8 @@ class AccountClientTest {
 
   private static final String ACCOUNT_SERVICE_URL = "http://localhost:8083";
 
+  private static final String INTERNAL_SERVICE_TOKEN = "test-internal-service-token";
+
   private static final UUID ACCOUNT_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
   private static final UUID CUSTOMER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -48,7 +50,8 @@ class AccountClientTest {
 
     server = MockRestServiceServer.bindTo(restClientBuilder).build();
 
-    AccountServiceProperties properties = new AccountServiceProperties(ACCOUNT_SERVICE_URL);
+    AccountServiceProperties properties =
+        new AccountServiceProperties(ACCOUNT_SERVICE_URL, INTERNAL_SERVICE_TOKEN);
 
     accountClient = new AccountClient(restClientBuilder, properties);
   }
@@ -56,8 +59,9 @@ class AccountClientTest {
   @Test
   void shouldGetAccount() {
     server
-        .expect(requestTo(ACCOUNT_SERVICE_URL + "/api/accounts/" + ACCOUNT_ID))
+        .expect(requestTo(ACCOUNT_SERVICE_URL + "/api/internal/accounts/" + ACCOUNT_ID))
         .andExpect(method(HttpMethod.GET))
+        .andExpect(header("X-Internal-Service-Token", INTERNAL_SERVICE_TOKEN))
         .andRespond(withSuccess(accountJson("100.00"), MediaType.APPLICATION_JSON));
 
     AccountResponse result = accountClient.getAccount(ACCOUNT_ID);
@@ -74,8 +78,9 @@ class AccountClientTest {
   @Test
   void shouldDebitAccountWithIdempotencyKey() {
     server
-        .expect(requestTo(ACCOUNT_SERVICE_URL + "/api/accounts/" + ACCOUNT_ID + "/debit"))
+        .expect(requestTo(ACCOUNT_SERVICE_URL + "/api/internal/accounts/" + ACCOUNT_ID + "/debit"))
         .andExpect(method(HttpMethod.POST))
+        .andExpect(header("X-Internal-Service-Token", INTERNAL_SERVICE_TOKEN))
         .andExpect(header("Idempotency-Key", OPERATION_ID.toString()))
         .andExpect(
             content()
@@ -98,8 +103,9 @@ class AccountClientTest {
   @Test
   void shouldCreditAccountWithIdempotencyKey() {
     server
-        .expect(requestTo(ACCOUNT_SERVICE_URL + "/api/accounts/" + ACCOUNT_ID + "/credit"))
+        .expect(requestTo(ACCOUNT_SERVICE_URL + "/api/internal/accounts/" + ACCOUNT_ID + "/credit"))
         .andExpect(method(HttpMethod.POST))
+        .andExpect(header("X-Internal-Service-Token", INTERNAL_SERVICE_TOKEN))
         .andExpect(header("Idempotency-Key", OPERATION_ID.toString()))
         .andExpect(
             content()
@@ -123,8 +129,9 @@ class AccountClientTest {
   @Test
   void shouldWrapAccountServiceHttpError() {
     server
-        .expect(requestTo(ACCOUNT_SERVICE_URL + "/api/accounts/" + ACCOUNT_ID + "/credit"))
+        .expect(requestTo(ACCOUNT_SERVICE_URL + "/api/internal/accounts/" + ACCOUNT_ID + "/credit"))
         .andExpect(method(HttpMethod.POST))
+        .andExpect(header("X-Internal-Service-Token", INTERNAL_SERVICE_TOKEN))
         .andExpect(header("Idempotency-Key", OPERATION_ID.toString()))
         .andRespond(
             withStatus(HttpStatus.CONFLICT)
@@ -150,8 +157,9 @@ class AccountClientTest {
   @Test
   void shouldWrapAccountServiceCommunicationError() {
     server
-        .expect(requestTo(ACCOUNT_SERVICE_URL + "/api/accounts/" + ACCOUNT_ID + "/debit"))
+        .expect(requestTo(ACCOUNT_SERVICE_URL + "/api/internal/accounts/" + ACCOUNT_ID + "/debit"))
         .andExpect(method(HttpMethod.POST))
+        .andExpect(header("X-Internal-Service-Token", INTERNAL_SERVICE_TOKEN))
         .andExpect(header("Idempotency-Key", OPERATION_ID.toString()))
         .andRespond(withException(new IOException("Connection reset")));
 
@@ -183,5 +191,24 @@ class AccountClientTest {
     }
     """
         .formatted(ACCOUNT_ID, CUSTOMER_ID, balance);
+  }
+
+  @Test
+  void shouldGetOwnedAccountWithUserAccessToken() {
+    String accessToken = "test-user-access-token";
+
+    server
+        .expect(requestTo(ACCOUNT_SERVICE_URL + "/api/accounts/" + ACCOUNT_ID))
+        .andExpect(method(HttpMethod.GET))
+        .andExpect(header("Authorization", "Bearer " + accessToken))
+        .andRespond(withSuccess(accountJson("100.00"), MediaType.APPLICATION_JSON));
+
+    AccountResponse result = accountClient.getOwnedAccount(ACCOUNT_ID, accessToken);
+
+    assertEquals(ACCOUNT_ID, result.id());
+    assertEquals(CUSTOMER_ID, result.customerId());
+    assertEquals(new BigDecimal("100.00"), result.balance());
+
+    server.verify();
   }
 }

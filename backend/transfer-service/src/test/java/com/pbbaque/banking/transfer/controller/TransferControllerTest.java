@@ -1,33 +1,36 @@
 package com.pbbaque.banking.transfer.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pbbaque.banking.transfer.config.SecurityConfig;
 import com.pbbaque.banking.transfer.domain.Transfer;
 import com.pbbaque.banking.transfer.dto.CreateTransferRequest;
-import com.pbbaque.banking.transfer.exception.GlobalExceptionHandler;
 import com.pbbaque.banking.transfer.exception.TransferNotFoundException;
 import com.pbbaque.banking.transfer.service.TransferService;
 import java.math.BigDecimal;
 import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
 /** Web layer tests for {@link TransferController}. */
-@ExtendWith(MockitoExtension.class)
+@WebMvcTest(TransferController.class)
+@Import(SecurityConfig.class)
 class TransferControllerTest {
 
   private static final UUID SOURCE_ACCOUNT_ID =
@@ -38,30 +41,20 @@ class TransferControllerTest {
 
   private static final UUID TRANSFER_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
 
+  private static final UUID IDENTITY_USER_ID =
+      UUID.fromString("44444444-4444-4444-4444-444444444444");
+
   private static final String IDEMPOTENCY_KEY = "transfer-key-1";
 
-  @Mock private TransferService transferService;
+  private static final String ACCESS_TOKEN = "test-access-token";
 
-  @InjectMocks private TransferController transferController;
+  @Autowired private MockMvc mockMvc;
 
-  private MockMvc mockMvc;
-  private ObjectMapper objectMapper;
+  @Autowired private ObjectMapper objectMapper;
 
-  /** Configures the standalone MVC test environment before each test. */
-  @BeforeEach
-  void setUp() {
-    LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
-    validator.afterPropertiesSet();
+  @MockitoBean private TransferService transferService;
 
-    mockMvc =
-        MockMvcBuilders.standaloneSetup(transferController)
-            .setControllerAdvice(new GlobalExceptionHandler())
-            .setValidator(validator)
-            .build();
-
-    objectMapper = new ObjectMapper();
-    objectMapper.findAndRegisterModules();
-  }
+  @MockitoBean private JwtDecoder jwtDecoder;
 
   @Test
   void shouldCreateTransfer() throws Exception {
@@ -83,11 +76,13 @@ class TransferControllerTest {
 
     transfer.complete();
 
-    when(transferService.createTransfer(any(CreateTransferRequest.class))).thenReturn(transfer);
+    when(transferService.createTransfer(any(CreateTransferRequest.class), eq(ACCESS_TOKEN)))
+        .thenReturn(transfer);
 
     mockMvc
         .perform(
             post("/api/transfers")
+                .with(userJwt())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isCreated())
@@ -109,10 +104,10 @@ class TransferControllerTest {
             "EUR",
             IDEMPOTENCY_KEY);
 
-    when(transferService.getById(TRANSFER_ID)).thenReturn(transfer);
+    when(transferService.getById(TRANSFER_ID, ACCESS_TOKEN)).thenReturn(transfer);
 
     mockMvc
-        .perform(get("/api/transfers/{id}", TRANSFER_ID))
+        .perform(get("/api/transfers/{id}", TRANSFER_ID).with(userJwt()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.sourceAccountId").value(SOURCE_ACCOUNT_ID.toString()))
         .andExpect(jsonPath("$.destinationAccountId").value(DESTINATION_ACCOUNT_ID.toString()))
@@ -129,10 +124,10 @@ class TransferControllerTest {
             "EUR",
             IDEMPOTENCY_KEY);
 
-    when(transferService.getByIdempotencyKey(IDEMPOTENCY_KEY)).thenReturn(transfer);
+    when(transferService.getByIdempotencyKey(IDEMPOTENCY_KEY, ACCESS_TOKEN)).thenReturn(transfer);
 
     mockMvc
-        .perform(get("/api/transfers").param("idempotencyKey", IDEMPOTENCY_KEY))
+        .perform(get("/api/transfers").with(userJwt()).param("idempotencyKey", IDEMPOTENCY_KEY))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.idempotencyKey").value(IDEMPOTENCY_KEY))
         .andExpect(jsonPath("$.amount").value(75.0000))
@@ -141,12 +136,11 @@ class TransferControllerTest {
 
   @Test
   void shouldReturnNotFoundWhenTransferDoesNotExist() throws Exception {
-
-    when(transferService.getById(TRANSFER_ID))
+    when(transferService.getById(TRANSFER_ID, ACCESS_TOKEN))
         .thenThrow(new TransferNotFoundException(TRANSFER_ID));
 
     mockMvc
-        .perform(get("/api/transfers/{id}", TRANSFER_ID))
+        .perform(get("/api/transfers/{id}", TRANSFER_ID).with(userJwt()))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.status").value(404))
         .andExpect(jsonPath("$.error").value("Not Found"))
@@ -162,6 +156,7 @@ class TransferControllerTest {
     mockMvc
         .perform(
             post("/api/transfers")
+                .with(userJwt())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isBadRequest())
@@ -172,9 +167,20 @@ class TransferControllerTest {
   @Test
   void shouldRejectInvalidTransferId() throws Exception {
     mockMvc
-        .perform(get("/api/transfers/not-a-uuid"))
+        .perform(get("/api/transfers/not-a-uuid").with(userJwt()))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value(400))
         .andExpect(jsonPath("$.error").value("Bad Request"));
+  }
+
+  @Test
+  void shouldRejectTransferEndpointWithoutJwt() throws Exception {
+    mockMvc.perform(get("/api/transfers/{id}", TRANSFER_ID)).andExpect(status().isUnauthorized());
+  }
+
+  private JwtRequestPostProcessor userJwt() {
+    return jwt()
+        .jwt(token -> token.tokenValue(ACCESS_TOKEN).subject(IDENTITY_USER_ID.toString()))
+        .authorities(new SimpleGrantedAuthority("ROLE_USER"));
   }
 }

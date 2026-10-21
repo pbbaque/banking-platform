@@ -8,6 +8,8 @@ import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,13 +38,14 @@ public class TransferController {
    * Creates and processes a banking transfer.
    *
    * @param request transfer creation request
+   * @param jwt authenticated user's JWT
    * @return created transfer
    */
   @PostMapping
   public ResponseEntity<TransferResponse> createTransfer(
-      @Valid @RequestBody CreateTransferRequest request) {
+      @Valid @RequestBody CreateTransferRequest request, @AuthenticationPrincipal Jwt jwt) {
 
-    Transfer transfer = transferService.createTransfer(request);
+    Transfer transfer = transferService.createTransfer(request, jwt.getTokenValue());
 
     return ResponseEntity.status(HttpStatus.CREATED).body(TransferResponse.from(transfer));
   }
@@ -51,11 +54,14 @@ public class TransferController {
    * Returns a transfer by its identifier.
    *
    * @param id transfer identifier
+   * @param jwt authenticated user's JWT
    * @return transfer response
    */
   @GetMapping("/{id}")
-  public ResponseEntity<TransferResponse> getById(@PathVariable UUID id) {
-    Transfer transfer = transferService.getById(id);
+  public ResponseEntity<TransferResponse> getById(
+      @PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+
+    Transfer transfer = transferService.getById(id, jwt.getTokenValue());
 
     return ResponseEntity.ok(TransferResponse.from(transfer));
   }
@@ -64,12 +70,14 @@ public class TransferController {
    * Returns a transfer by its idempotency key.
    *
    * @param idempotencyKey transfer idempotency key
+   * @param jwt authenticated user's JWT
    * @return transfer response
    */
   @GetMapping
-  public ResponseEntity<TransferResponse> getByIdempotencyKey(@RequestParam String idempotencyKey) {
+  public ResponseEntity<TransferResponse> getByIdempotencyKey(
+      @RequestParam String idempotencyKey, @AuthenticationPrincipal Jwt jwt) {
 
-    Transfer transfer = transferService.getByIdempotencyKey(idempotencyKey);
+    Transfer transfer = transferService.getByIdempotencyKey(idempotencyKey, jwt.getTokenValue());
 
     return ResponseEntity.ok(TransferResponse.from(transfer));
   }

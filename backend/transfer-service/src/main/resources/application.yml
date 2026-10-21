@@ -34,6 +34,7 @@ management:
 clients:
   account-service:
     base-url: ${ACCOUNT_SERVICE_URL:http://localhost:8083}
+    internal-token: ${INTERNAL_SERVICE_TOKEN}
 
 messaging:
   kafka:
@@ -48,3 +49,7 @@ messaging:
       send-timeout: 10s
       retry-delay: 30s
       polling-interval: 5s
+
+security:
+  jwt:
+    public-key: ${JWT_PUBLIC_KEY:classpath:keys/public.pem}

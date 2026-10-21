@@ -6,6 +6,7 @@ import com.pbbaque.banking.transfer.dto.AmountRequest;
 import com.pbbaque.banking.transfer.exception.AccountServiceException;
 import java.math.BigDecimal;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -16,8 +17,10 @@ import org.springframework.web.client.RestClientResponseException;
 public class AccountClient {
 
   private static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+  private static final String INTERNAL_SERVICE_HEADER = "X-Internal-Service-Token";
 
   private final RestClient restClient;
+  private final String internalServiceToken;
 
   /**
    * Creates a new account-service client.
@@ -27,10 +30,11 @@ public class AccountClient {
    */
   public AccountClient(RestClient.Builder restClientBuilder, AccountServiceProperties properties) {
     this.restClient = restClientBuilder.baseUrl(properties.baseUrl()).build();
+    this.internalServiceToken = properties.internalToken();
   }
 
   /**
-   * Retrieves an account.
+   * Retrieves an account through the internal service API.
    *
    * @param accountId account identifier
    * @return account information
@@ -40,12 +44,39 @@ public class AccountClient {
     try {
       return restClient
           .get()
-          .uri("/api/accounts/{id}", accountId)
+          .uri("/api/internal/accounts/{id}", accountId)
+          .header(INTERNAL_SERVICE_HEADER, internalServiceToken)
           .retrieve()
           .body(AccountResponse.class);
     } catch (RestClientResponseException exception) {
       throw new AccountServiceException(
           "Account service rejected account lookup", exception.getStatusCode(), exception);
+    } catch (RestClientException exception) {
+      throw new AccountServiceException("Unable to communicate with account service", exception);
+    }
+  }
+
+  /**
+   * Retrieves an account using the authenticated user's JWT.
+   *
+   * <p>Account-service performs the actual account ownership validation.
+   *
+   * @param accountId account identifier
+   * @param accessToken authenticated user's JWT
+   * @return account information when the user owns the account
+   * @throws AccountServiceException when account-service rejects the request or cannot be reached
+   */
+  public AccountResponse getOwnedAccount(UUID accountId, String accessToken) {
+    try {
+      return restClient
+          .get()
+          .uri("/api/accounts/{id}", accountId)
+          .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+          .retrieve()
+          .body(AccountResponse.class);
+    } catch (RestClientResponseException exception) {
+      throw new AccountServiceException(
+          "Account service rejected account ownership check", exception.getStatusCode(), exception);
     } catch (RestClientException exception) {
       throw new AccountServiceException("Unable to communicate with account service", exception);
     }
@@ -67,7 +98,8 @@ public class AccountClient {
     try {
       return restClient
           .post()
-          .uri("/api/accounts/{id}/debit", accountId)
+          .uri("/api/internal/accounts/{id}/debit", accountId)
+          .header(INTERNAL_SERVICE_HEADER, internalServiceToken)
           .header(IDEMPOTENCY_KEY_HEADER, operationId.toString())
           .body(new AmountRequest(amount))
           .retrieve()
@@ -96,7 +128,8 @@ public class AccountClient {
     try {
       return restClient
           .post()
-          .uri("/api/accounts/{id}/credit", accountId)
+          .uri("/api/internal/accounts/{id}/credit", accountId)
+          .header(INTERNAL_SERVICE_HEADER, internalServiceToken)
           .header(IDEMPOTENCY_KEY_HEADER, operationId.toString())
           .body(new AmountRequest(amount))
           .retrieve()

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pbbaque.banking.transfer.client.AccountClient;
 import com.pbbaque.banking.transfer.domain.OutboxEvent;
 import com.pbbaque.banking.transfer.domain.Transfer;
+import com.pbbaque.banking.transfer.domain.TransferProcessingStage;
 import com.pbbaque.banking.transfer.dto.AuditEventMessage;
 import com.pbbaque.banking.transfer.dto.CreateTransferRequest;
 import com.pbbaque.banking.transfer.exception.AccountServiceException;
@@ -53,6 +54,7 @@ public class TransferService {
       AccountOperationIdFactory accountOperationIdFactory,
       ObjectMapper objectMapper,
       PlatformTransactionManager transactionManager) {
+
     this.transferRepository = transferRepository;
     this.outboxEventRepository = outboxEventRepository;
     this.accountClient = accountClient;
@@ -64,19 +66,28 @@ public class TransferService {
   /**
    * Creates and processes a banking transfer.
    *
-   * <p>If the supplied idempotency key was already processed, the existing transfer is returned
-   * without executing the debit or credit again.
+   * <p>The authenticated user must own the source account. Terminal transfers are returned directly
+   * when the same idempotency key is replayed. Pending transfers are resumed from their persisted
+   * processing stage.
    *
    * @param request transfer request
+   * @param accessToken authenticated user's JWT
    * @return processed transfer
    */
-  public Transfer createTransfer(CreateTransferRequest request) {
+  public Transfer createTransfer(CreateTransferRequest request, String accessToken) {
+    requireSourceAccountOwnership(request.sourceAccountId(), accessToken);
+
     Transfer existingTransfer =
         transferRepository.findByIdempotencyKey(request.idempotencyKey()).orElse(null);
 
     if (existingTransfer != null) {
       validateIdempotentRequest(existingTransfer, request);
-      return existingTransfer;
+
+      if (existingTransfer.isTerminal()) {
+        return existingTransfer;
+      }
+
+      return resumeTransfer(existingTransfer);
     }
 
     Transfer transfer =
@@ -89,12 +100,77 @@ public class TransferService {
 
     transfer = transferRepository.save(transfer);
 
+    return resumeTransfer(transfer);
+  }
+
+  /**
+   * Returns a transfer by its identifier.
+   *
+   * @param transferId transfer identifier
+   * @param accessToken authenticated user's JWT
+   * @return transfer when found and owned by the authenticated user
+   */
+  public Transfer getById(UUID transferId, String accessToken) {
+    Transfer transfer =
+        transferRepository
+            .findById(transferId)
+            .orElseThrow(() -> new TransferNotFoundException(transferId));
+
+    requireSourceAccountOwnership(transfer.getSourceAccountId(), accessToken);
+
+    return transfer;
+  }
+
+  /**
+   * Returns a transfer by its idempotency key.
+   *
+   * @param idempotencyKey idempotency key
+   * @param accessToken authenticated user's JWT
+   * @return transfer when found and owned by the authenticated user
+   */
+  public Transfer getByIdempotencyKey(String idempotencyKey, String accessToken) {
+    Transfer transfer =
+        transferRepository
+            .findByIdempotencyKey(idempotencyKey)
+            .orElseThrow(() -> new TransferNotFoundException(idempotencyKey));
+
+    requireSourceAccountOwnership(transfer.getSourceAccountId(), accessToken);
+
+    return transfer;
+  }
+
+  private Transfer resumeTransfer(Transfer transfer) {
+    if (!transfer.isResumable()) {
+      if (transfer.getProcessingStage() == TransferProcessingStage.RECOVERY_REQUIRED) {
+        throw new IllegalStateException(
+            "Transfer requires manual recovery because its processing stage is unknown");
+      }
+
+      return transfer;
+    }
+
+    return switch (transfer.getProcessingStage()) {
+      case DEBIT_PENDING -> processDebit(transfer);
+      case CREDIT_PENDING -> processCredit(transfer);
+      case COMPENSATION_PENDING -> processCompensation(transfer, null);
+      case TERMINAL -> transfer;
+      case RECOVERY_REQUIRED ->
+          throw new IllegalStateException(
+              "Transfer requires manual recovery because its processing stage is unknown");
+    };
+  }
+
+  private Transfer processDebit(Transfer transfer) {
     UUID transferId = requireTransferId(transfer);
     UUID debitOperationId = accountOperationIdFactory.debit(transferId);
 
     try {
       accountClient.debit(transfer.getSourceAccountId(), transfer.getAmount(), debitOperationId);
     } catch (AccountServiceException exception) {
+      if (isCommunicationFailure(exception)) {
+        throw exception;
+      }
+
       transfer.fail("Unable to debit source account");
 
       persistTransferWithAudit(
@@ -106,13 +182,28 @@ public class TransferService {
       throw exception;
     }
 
+    transfer.markDebitCompleted();
+    transfer = transferRepository.save(transfer);
+
+    return processCredit(transfer);
+  }
+
+  private Transfer processCredit(Transfer transfer) {
+    UUID transferId = requireTransferId(transfer);
     UUID creditOperationId = accountOperationIdFactory.credit(transferId);
 
     try {
       accountClient.credit(
           transfer.getDestinationAccountId(), transfer.getAmount(), creditOperationId);
     } catch (AccountServiceException creditException) {
-      return compensateSourceAccount(transfer, creditException);
+      if (isCommunicationFailure(creditException)) {
+        throw creditException;
+      }
+
+      transfer.markCompensationPending();
+      transfer = transferRepository.save(transfer);
+
+      return processCompensation(transfer, creditException);
     }
 
     transfer.complete();
@@ -121,31 +212,7 @@ public class TransferService {
         transfer, COMPLETED_EVENT_TYPE, "SUCCESS", "Transfer completed successfully");
   }
 
-  /**
-   * Returns a transfer by its identifier.
-   *
-   * @param transferId transfer identifier
-   * @return transfer when found
-   */
-  public Transfer getById(UUID transferId) {
-    return transferRepository
-        .findById(transferId)
-        .orElseThrow(() -> new TransferNotFoundException(transferId));
-  }
-
-  /**
-   * Returns a transfer by its idempotency key.
-   *
-   * @param idempotencyKey idempotency key
-   * @return transfer when found
-   */
-  public Transfer getByIdempotencyKey(String idempotencyKey) {
-    return transferRepository
-        .findByIdempotencyKey(idempotencyKey)
-        .orElseThrow(() -> new TransferNotFoundException(idempotencyKey));
-  }
-
-  private Transfer compensateSourceAccount(
+  private Transfer processCompensation(
       Transfer transfer, AccountServiceException originalException) {
 
     UUID transferId = requireTransferId(transfer);
@@ -163,7 +230,16 @@ public class TransferService {
           "FAILURE",
           "Transfer failed because the destination account could not be credited; "
               + "the source debit was compensated");
+
     } catch (AccountServiceException compensationException) {
+      if (isCommunicationFailure(compensationException)) {
+        if (originalException != null) {
+          compensationException.addSuppressed(originalException);
+        }
+
+        throw compensationException;
+      }
+
       transfer.fail("Destination credit and source compensation both failed");
 
       persistTransferWithAudit(
@@ -172,9 +248,21 @@ public class TransferService {
           "FAILURE",
           "Transfer failed and the source account compensation also failed");
 
-      compensationException.addSuppressed(originalException);
+      if (originalException != null) {
+        compensationException.addSuppressed(originalException);
+      }
+
       throw compensationException;
     }
+  }
+
+  private boolean isCommunicationFailure(AccountServiceException exception) {
+    return exception.getStatusCode() == null;
+  }
+
+  private void requireSourceAccountOwnership(UUID sourceAccountId, String accessToken) {
+
+    accountClient.getOwnedAccount(sourceAccountId, accessToken);
   }
 
   private Transfer persistTransferWithAudit(
@@ -225,6 +313,7 @@ public class TransferService {
     metadata.put("currency", transfer.getCurrency());
     metadata.put("idempotencyKey", transfer.getIdempotencyKey());
     metadata.put("status", transfer.getStatus());
+    metadata.put("processingStage", transfer.getProcessingStage());
 
     return metadata;
   }
