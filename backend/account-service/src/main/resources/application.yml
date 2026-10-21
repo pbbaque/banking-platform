@@ -13,6 +13,16 @@ spring:
     hibernate:
       ddl-auto: validate
 
+customer-service:
+  base-url: ${CUSTOMER_SERVICE_URL:http://localhost:8081}
+
+security:
+  jwt:
+    public-key: ${JWT_PUBLIC_KEY:classpath:keys/public.pem}
+
+  internal:
+    token: ${INTERNAL_SERVICE_TOKEN}
+
 server:
   port: 8083
 
