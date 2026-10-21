@@ -156,6 +156,7 @@ failsafe-reports/
 .tmp/
 **/.tmp/
 
+.backend-processes.json
 
 # =========================
 # OS files
