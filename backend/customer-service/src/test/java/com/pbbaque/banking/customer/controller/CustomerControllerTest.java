@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pbbaque.banking.customer.config.SecurityConfig;
 import com.pbbaque.banking.customer.domain.CustomerStatus;
 import com.pbbaque.banking.customer.domain.DocumentType;
 import com.pbbaque.banking.customer.dto.CreateCustomerRequest;
@@ -23,6 +24,7 @@ import com.pbbaque.banking.customer.exception.CustomerAlreadyExistsException;
 import com.pbbaque.banking.customer.exception.CustomerNotFoundException;
 import com.pbbaque.banking.customer.exception.GlobalExceptionHandler;
 import com.pbbaque.banking.customer.exception.InvalidCustomerStatusTransitionException;
+import com.pbbaque.banking.customer.security.InternalServiceAuthenticationFilter;
 import com.pbbaque.banking.customer.service.CustomerService;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -34,11 +36,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(CustomerController.class)
-@Import(GlobalExceptionHandler.class)
+@Import({
+  GlobalExceptionHandler.class,
+  SecurityConfig.class,
+  InternalServiceAuthenticationFilter.class
+})
+@TestPropertySource(properties = "security.internal.token=test-internal-token")
 class CustomerControllerTest {
 
   @Autowired private MockMvc mockMvc;
@@ -109,16 +117,16 @@ class CustomerControllerTest {
   void shouldReturn400WhenRequestIsInvalid() throws Exception {
     String request =
         """
-                                {
-                                    "identityUserId": "22222222-2222-2222-2222-222222222222",
-                                    "firstName": "",
-                                    "lastName": "Customer",
-                                    "documentType": "DNI",
-                                    "documentNumber": "12345678A",
-                                    "dateOfBirth": "2030-01-01",
-                                    "countryCode": "ESP"
-                                }
-                                """;
+        {
+            "identityUserId": "22222222-2222-2222-2222-222222222222",
+            "firstName": "",
+            "lastName": "Customer",
+            "documentType": "DNI",
+            "documentNumber": "12345678A",
+            "dateOfBirth": "2030-01-01",
+            "countryCode": "ESP"
+        }
+        """;
 
     mockMvc
         .perform(post("/api/v1/customers").contentType(MediaType.APPLICATION_JSON).content(request))

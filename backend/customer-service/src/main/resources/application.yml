@@ -21,3 +21,7 @@ management:
     web:
       exposure:
         include: health,info
+
+security:
+  internal:
+    token: ${INTERNAL_SERVICE_TOKEN}

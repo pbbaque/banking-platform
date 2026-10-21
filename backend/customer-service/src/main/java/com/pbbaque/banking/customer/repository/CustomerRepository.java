@@ -16,6 +16,8 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
 
   Optional<Customer> findByIdentityUserId(UUID userId);
 
+  Optional<Customer> findByIdentityUserIdAndDeletedAtIsNull(UUID identityUserId);
+
   Optional<Customer> findByDocumentTypeAndDocumentNumber(
       DocumentType documentType, String documentNumber);
 

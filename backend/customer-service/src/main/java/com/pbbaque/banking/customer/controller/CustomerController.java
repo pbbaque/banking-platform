@@ -30,6 +30,11 @@ public class CustomerController {
     this.customerService = customerService;
   }
 
+  /**
+   * Retrieves all non-archived customers.
+   *
+   * @return customer list
+   */
   @GetMapping
   public ResponseEntity<List<CustomerResponse>> getAll() {
     return ResponseEntity.ok(customerService.getAll());
@@ -44,6 +49,20 @@ public class CustomerController {
   @GetMapping("/{id}")
   public ResponseEntity<CustomerResponse> getById(@PathVariable UUID id) {
     CustomerResponse response = customerService.getById(id);
+
+    return ResponseEntity.ok(response);
+  }
+
+  /**
+   * Retrieves a customer by its associated identity user identifier.
+   *
+   * @param identityUserId identity user identifier
+   * @return matching customer
+   */
+  @GetMapping("/by-identity-user/{identityUserId}")
+  public ResponseEntity<CustomerResponse> getByIdentityUserId(@PathVariable UUID identityUserId) {
+
+    CustomerResponse response = customerService.getByIdentityUserId(identityUserId);
 
     return ResponseEntity.ok(response);
   }
@@ -90,16 +109,34 @@ public class CustomerController {
     return ResponseEntity.noContent().build();
   }
 
+  /**
+   * Activates a customer.
+   *
+   * @param id customer identifier
+   * @return activated customer
+   */
   @PatchMapping("/{id}/activate")
   public ResponseEntity<CustomerResponse> activate(@PathVariable UUID id) {
     return ResponseEntity.ok(customerService.activate(id));
   }
 
+  /**
+   * Blocks a customer.
+   *
+   * @param id customer identifier
+   * @return blocked customer
+   */
   @PatchMapping("/{id}/block")
   public ResponseEntity<CustomerResponse> block(@PathVariable UUID id) {
     return ResponseEntity.ok(customerService.block(id));
   }
 
+  /**
+   * Deactivates a customer.
+   *
+   * @param id customer identifier
+   * @return deactivated customer
+   */
   @PatchMapping("/{id}/deactivate")
   public ResponseEntity<CustomerResponse> deactivate(@PathVariable UUID id) {
     return ResponseEntity.ok(customerService.deactivate(id));

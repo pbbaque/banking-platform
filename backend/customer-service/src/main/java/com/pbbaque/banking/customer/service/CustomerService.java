@@ -52,6 +52,29 @@ public class CustomerService {
   }
 
   /**
+   * Retrieves a non-archived customer by its associated identity user identifier.
+   *
+   * <p>This operation allows other services to resolve the banking customer associated with the
+   * authenticated identity represented by a JWT subject.
+   *
+   * @param identityUserId identity user identifier
+   * @return matching customer
+   * @throws CustomerNotFoundException if no active customer exists for the identity user
+   */
+  @Transactional(readOnly = true)
+  public CustomerResponse getByIdentityUserId(UUID identityUserId) {
+    Customer customer =
+        customerRepository
+            .findByIdentityUserIdAndDeletedAtIsNull(identityUserId)
+            .orElseThrow(
+                () ->
+                    new CustomerNotFoundException(
+                        "Customer not found for identity user: " + identityUserId));
+
+    return CustomerResponse.from(customer);
+  }
+
+  /**
    * Creates a new customer.
    *
    * @param request customer creation request

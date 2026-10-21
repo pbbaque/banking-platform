@@ -131,6 +131,34 @@ class CustomerServiceTest {
   }
 
   @Test
+  void shouldGetCustomerByIdentityUserId() {
+    Customer customer = createCustomer();
+
+    when(customerRepository.findByIdentityUserIdAndDeletedAtIsNull(customer.getIdentityUserId()))
+        .thenReturn(Optional.of(customer));
+
+    CustomerResponse response = customerService.getByIdentityUserId(customer.getIdentityUserId());
+
+    assertEquals(customer.getId(), response.id());
+    assertEquals(customer.getIdentityUserId(), response.identityUserId());
+
+    verify(customerRepository).findByIdentityUserIdAndDeletedAtIsNull(customer.getIdentityUserId());
+  }
+
+  @Test
+  void shouldThrowWhenCustomerDoesNotExistForIdentityUserId() {
+    UUID identityUserId = UUID.randomUUID();
+
+    when(customerRepository.findByIdentityUserIdAndDeletedAtIsNull(identityUserId))
+        .thenReturn(Optional.empty());
+
+    assertThrows(
+        CustomerNotFoundException.class, () -> customerService.getByIdentityUserId(identityUserId));
+
+    verify(customerRepository).findByIdentityUserIdAndDeletedAtIsNull(identityUserId);
+  }
+
+  @Test
   void shouldThrowWhenCustomerDoesNotExist() {
     UUID id = UUID.randomUUID();
 
