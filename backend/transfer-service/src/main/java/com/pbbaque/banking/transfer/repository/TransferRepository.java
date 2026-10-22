@@ -34,6 +34,16 @@ public interface TransferRepository extends JpaRepository<Transfer, UUID> {
   List<Transfer> findAllByDestinationAccountId(UUID destinationAccountId);
 
   /**
+   * Returns all transfers sent from or received by the specified account, newest first.
+   *
+   * @param sourceAccountId source account identifier
+   * @param destinationAccountId destination account identifier
+   * @return account transfer history
+   */
+  List<Transfer> findAllBySourceAccountIdOrDestinationAccountIdOrderByCreatedAtDesc(
+      UUID sourceAccountId, UUID destinationAccountId);
+
+  /**
    * Checks whether an idempotency key already exists.
    *
    * @param idempotencyKey idempotency key

@@ -30,6 +30,7 @@ public class AccountService {
    */
   public AccountService(
       AccountRepository accountRepository, AccountOperationRepository accountOperationRepository) {
+
     this.accountRepository = accountRepository;
     this.accountOperationRepository = accountOperationRepository;
   }
@@ -69,6 +70,20 @@ public class AccountService {
     return accountRepository
         .findById(id)
         .orElseThrow(() -> new AccountNotFoundException("Account not found"));
+  }
+
+  /**
+   * Finds an account operation by its identifier.
+   *
+   * @param operationId operation identifier
+   * @return matching operation
+   * @throws AccountNotFoundException when the operation does not exist
+   */
+  @Transactional(readOnly = true)
+  public AccountOperation getOperationById(UUID operationId) {
+    return accountOperationRepository
+        .findById(operationId)
+        .orElseThrow(() -> new AccountNotFoundException("Account operation not found"));
   }
 
   /**
@@ -154,6 +169,7 @@ public class AccountService {
    */
   @Transactional
   public Account credit(UUID id, BigDecimal amount, UUID operationId) {
+
     return executeBalanceOperation(id, amount, operationId, AccountOperationType.CREDIT);
   }
 
@@ -173,6 +189,7 @@ public class AccountService {
    */
   @Transactional
   public Account debit(UUID id, BigDecimal amount, UUID operationId) {
+
     return executeBalanceOperation(id, amount, operationId, AccountOperationType.DEBIT);
   }
 
@@ -184,6 +201,7 @@ public class AccountService {
 
     if (existingOperation != null) {
       validateReplay(existingOperation, accountId, amount, operationType);
+
       return getById(accountId);
     }
 
@@ -211,7 +229,9 @@ public class AccountService {
       AccountOperationType operationType) {
 
     boolean sameAccount = existingOperation.getAccountId().equals(accountId);
+
     boolean sameType = existingOperation.getOperationType() == operationType;
+
     boolean sameAmount = existingOperation.getAmount().compareTo(amount) == 0;
 
     if (!sameAccount || !sameType || !sameAmount) {

@@ -5,6 +5,8 @@ import com.pbbaque.banking.transfer.dto.CreateTransferRequest;
 import com.pbbaque.banking.transfer.dto.TransferResponse;
 import com.pbbaque.banking.transfer.service.TransferService;
 import jakarta.validation.Valid;
+import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -31,6 +33,7 @@ public class TransferController {
    * @param transferService transfer application service
    */
   public TransferController(TransferService transferService) {
+
     this.transferService = transferService;
   }
 
@@ -47,7 +50,11 @@ public class TransferController {
 
     Transfer transfer = transferService.createTransfer(request, jwt.getTokenValue());
 
-    return ResponseEntity.status(HttpStatus.CREATED).body(TransferResponse.from(transfer));
+    BigDecimal balanceAfter =
+        transferService.getBalanceAfter(transfer, transfer.getSourceAccountId());
+
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(TransferResponse.from(transfer, balanceAfter));
   }
 
   /**
@@ -63,7 +70,9 @@ public class TransferController {
 
     Transfer transfer = transferService.getById(id, jwt.getTokenValue());
 
-    return ResponseEntity.ok(TransferResponse.from(transfer));
+    BigDecimal balanceAfter = transferService.getBalanceAfterForUser(transfer, jwt.getTokenValue());
+
+    return ResponseEntity.ok(TransferResponse.from(transfer, balanceAfter));
   }
 
   /**
@@ -73,12 +82,37 @@ public class TransferController {
    * @param jwt authenticated user's JWT
    * @return transfer response
    */
-  @GetMapping
+  @GetMapping(params = "idempotencyKey")
   public ResponseEntity<TransferResponse> getByIdempotencyKey(
       @RequestParam String idempotencyKey, @AuthenticationPrincipal Jwt jwt) {
 
     Transfer transfer = transferService.getByIdempotencyKey(idempotencyKey, jwt.getTokenValue());
 
-    return ResponseEntity.ok(TransferResponse.from(transfer));
+    BigDecimal balanceAfter =
+        transferService.getBalanceAfter(transfer, transfer.getSourceAccountId());
+
+    return ResponseEntity.ok(TransferResponse.from(transfer, balanceAfter));
+  }
+
+  /**
+   * Returns transfers involving one owned account.
+   *
+   * @param accountId account identifier
+   * @param jwt authenticated user's JWT
+   * @return account transfer history
+   */
+  @GetMapping(params = "accountId")
+  public ResponseEntity<List<TransferResponse>> getByAccountId(
+      @RequestParam UUID accountId, @AuthenticationPrincipal Jwt jwt) {
+
+    List<TransferResponse> response =
+        transferService.getByAccountId(accountId, jwt.getTokenValue()).stream()
+            .map(
+                transfer ->
+                    TransferResponse.from(
+                        transfer, transferService.getBalanceAfter(transfer, accountId)))
+            .toList();
+
+    return ResponseEntity.ok(response);
   }
 }

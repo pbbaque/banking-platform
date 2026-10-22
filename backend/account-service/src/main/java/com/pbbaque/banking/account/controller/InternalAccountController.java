@@ -1,5 +1,6 @@
 package com.pbbaque.banking.account.controller;
 
+import com.pbbaque.banking.account.dto.AccountOperationResponse;
 import com.pbbaque.banking.account.dto.AccountResponse;
 import com.pbbaque.banking.account.dto.AmountRequest;
 import com.pbbaque.banking.account.service.AccountService;
@@ -27,6 +28,7 @@ public class InternalAccountController {
    * @param accountService account application service
    */
   public InternalAccountController(AccountService accountService) {
+
     this.accountService = accountService;
   }
 
@@ -38,7 +40,21 @@ public class InternalAccountController {
    */
   @GetMapping("/{id}")
   public ResponseEntity<AccountResponse> getById(@PathVariable UUID id) {
+
     return ResponseEntity.ok(AccountResponse.from(accountService.getById(id)));
+  }
+
+  /**
+   * Retrieves a completed account operation.
+   *
+   * @param operationId operation identifier
+   * @return matching account operation
+   */
+  @GetMapping("/operations/{operationId}")
+  public ResponseEntity<AccountOperationResponse> getOperationById(@PathVariable UUID operationId) {
+
+    return ResponseEntity.ok(
+        AccountOperationResponse.from(accountService.getOperationById(operationId)));
   }
 
   /**

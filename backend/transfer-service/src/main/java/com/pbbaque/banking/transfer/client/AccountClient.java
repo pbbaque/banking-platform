@@ -1,12 +1,15 @@
 package com.pbbaque.banking.transfer.client;
 
 import com.pbbaque.banking.transfer.config.AccountServiceProperties;
+import com.pbbaque.banking.transfer.dto.AccountOperationResponse;
 import com.pbbaque.banking.transfer.dto.AccountResponse;
 import com.pbbaque.banking.transfer.dto.AmountRequest;
 import com.pbbaque.banking.transfer.exception.AccountServiceException;
 import java.math.BigDecimal;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -29,7 +32,9 @@ public class AccountClient {
    * @param properties account-service configuration
    */
   public AccountClient(RestClient.Builder restClientBuilder, AccountServiceProperties properties) {
+
     this.restClient = restClientBuilder.baseUrl(properties.baseUrl()).build();
+
     this.internalServiceToken = properties.internalToken();
   }
 
@@ -48,9 +53,11 @@ public class AccountClient {
           .header(INTERNAL_SERVICE_HEADER, internalServiceToken)
           .retrieve()
           .body(AccountResponse.class);
+
     } catch (RestClientResponseException exception) {
       throw new AccountServiceException(
           "Account service rejected account lookup", exception.getStatusCode(), exception);
+
     } catch (RestClientException exception) {
       throw new AccountServiceException("Unable to communicate with account service", exception);
     }
@@ -67,6 +74,7 @@ public class AccountClient {
    * @throws AccountServiceException when account-service rejects the request or cannot be reached
    */
   public AccountResponse getOwnedAccount(UUID accountId, String accessToken) {
+
     try {
       return restClient
           .get()
@@ -74,9 +82,46 @@ public class AccountClient {
           .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
           .retrieve()
           .body(AccountResponse.class);
+
     } catch (RestClientResponseException exception) {
       throw new AccountServiceException(
           "Account service rejected account ownership check", exception.getStatusCode(), exception);
+
+    } catch (RestClientException exception) {
+      throw new AccountServiceException("Unable to communicate with account service", exception);
+    }
+  }
+
+  /**
+   * Retrieves a completed balance operation.
+   *
+   * @param operationId operation identifier
+   * @return operation when it exists
+   * @throws AccountServiceException when account-service rejects the request or cannot be reached
+   */
+  public Optional<AccountOperationResponse> findOperation(UUID operationId) {
+
+    try {
+      AccountOperationResponse response =
+          restClient
+              .get()
+              .uri("/api/internal/accounts/operations/{operationId}", operationId)
+              .header(INTERNAL_SERVICE_HEADER, internalServiceToken)
+              .retrieve()
+              .body(AccountOperationResponse.class);
+
+      return Optional.ofNullable(response);
+
+    } catch (RestClientResponseException exception) {
+      if (exception.getStatusCode() == HttpStatus.NOT_FOUND) {
+        return Optional.empty();
+      }
+
+      throw new AccountServiceException(
+          "Account service rejected account operation lookup",
+          exception.getStatusCode(),
+          exception);
+
     } catch (RestClientException exception) {
       throw new AccountServiceException("Unable to communicate with account service", exception);
     }
@@ -95,6 +140,7 @@ public class AccountClient {
    * @throws AccountServiceException when account-service rejects the request or cannot be reached
    */
   public AccountResponse debit(UUID accountId, BigDecimal amount, UUID operationId) {
+
     try {
       return restClient
           .post()
@@ -104,9 +150,11 @@ public class AccountClient {
           .body(new AmountRequest(amount))
           .retrieve()
           .body(AccountResponse.class);
+
     } catch (RestClientResponseException exception) {
       throw new AccountServiceException(
           "Account service rejected debit operation", exception.getStatusCode(), exception);
+
     } catch (RestClientException exception) {
       throw new AccountServiceException("Unable to communicate with account service", exception);
     }
@@ -125,6 +173,7 @@ public class AccountClient {
    * @throws AccountServiceException when account-service rejects the request or cannot be reached
    */
   public AccountResponse credit(UUID accountId, BigDecimal amount, UUID operationId) {
+
     try {
       return restClient
           .post()
@@ -134,9 +183,11 @@ public class AccountClient {
           .body(new AmountRequest(amount))
           .retrieve()
           .body(AccountResponse.class);
+
     } catch (RestClientResponseException exception) {
       throw new AccountServiceException(
           "Account service rejected credit operation", exception.getStatusCode(), exception);
+
     } catch (RestClientException exception) {
       throw new AccountServiceException("Unable to communicate with account service", exception);
     }

@@ -17,6 +17,8 @@ import java.util.UUID;
  * @param status current transfer status
  * @param idempotencyKey idempotency key associated with the request
  * @param failureReason failure reason when the transfer did not complete
+ * @param balanceAfter balance of the authenticated user's account after the related account
+ *     operation
  * @param createdAt transfer creation time
  * @param updatedAt last modification time
  * @param completedAt completion time when successful
@@ -30,6 +32,7 @@ public record TransferResponse(
     TransferStatus status,
     String idempotencyKey,
     String failureReason,
+    BigDecimal balanceAfter,
     OffsetDateTime createdAt,
     OffsetDateTime updatedAt,
     OffsetDateTime completedAt) {
@@ -38,9 +41,12 @@ public record TransferResponse(
    * Creates an API response from a transfer entity.
    *
    * @param transfer transfer entity
+   * @param balanceAfter resulting balance for the account from whose perspective the transfer is
+   *     shown
    * @return transfer response
    */
-  public static TransferResponse from(Transfer transfer) {
+  public static TransferResponse from(Transfer transfer, BigDecimal balanceAfter) {
+
     return new TransferResponse(
         transfer.getId(),
         transfer.getSourceAccountId(),
@@ -50,6 +56,7 @@ public record TransferResponse(
         transfer.getStatus(),
         transfer.getIdempotencyKey(),
         transfer.getFailureReason(),
+        balanceAfter,
         transfer.getCreatedAt(),
         transfer.getUpdatedAt(),
         transfer.getCompletedAt());
