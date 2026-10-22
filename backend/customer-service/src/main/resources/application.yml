@@ -25,3 +25,6 @@ management:
 security:
   internal:
     token: ${INTERNAL_SERVICE_TOKEN}
+
+  jwt:
+    public-key: ${JWT_PUBLIC_KEY:classpath:keys/public.pem}

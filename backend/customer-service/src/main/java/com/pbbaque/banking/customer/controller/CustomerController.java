@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -38,6 +40,21 @@ public class CustomerController {
   @GetMapping
   public ResponseEntity<List<CustomerResponse>> getAll() {
     return ResponseEntity.ok(customerService.getAll());
+  }
+
+  /**
+   * Retrieves the customer associated with the authenticated identity user.
+   *
+   * @param jwt authenticated access token
+   * @return authenticated customer
+   */
+  @GetMapping("/me")
+  public ResponseEntity<CustomerResponse> getCurrentCustomer(@AuthenticationPrincipal Jwt jwt) {
+
+    UUID identityUserId = UUID.fromString(jwt.getSubject());
+    CustomerResponse response = customerService.getByIdentityUserId(identityUserId);
+
+    return ResponseEntity.ok(response);
   }
 
   /**

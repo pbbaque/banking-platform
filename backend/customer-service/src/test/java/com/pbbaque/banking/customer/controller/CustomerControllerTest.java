@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -36,9 +37,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 @WebMvcTest(CustomerController.class)
 @Import({
@@ -54,6 +57,16 @@ class CustomerControllerTest {
   @Autowired private ObjectMapper objectMapper;
 
   @MockitoBean private CustomerService customerService;
+
+  private RequestPostProcessor authenticatedUser() {
+    return authenticatedUser(UUID.randomUUID());
+  }
+
+  private RequestPostProcessor authenticatedUser(UUID identityUserId) {
+    return jwt()
+        .jwt(token -> token.subject(identityUserId.toString()).claim("username", "test-user"))
+        .authorities(new SimpleGrantedAuthority("ROLE_USER"));
+  }
 
   private CustomerResponse createResponse(UUID id, UUID identityUserId, CustomerStatus status) {
     OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
@@ -74,6 +87,31 @@ class CustomerControllerTest {
         status,
         now,
         now);
+  }
+
+  @Test
+  void shouldRejectUnauthenticatedRequest() throws Exception {
+    mockMvc.perform(get("/api/v1/customers")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void shouldGetCurrentCustomer() throws Exception {
+    UUID identityUserId = UUID.randomUUID();
+    UUID customerId = UUID.randomUUID();
+
+    CustomerResponse response = createResponse(customerId, identityUserId, CustomerStatus.ACTIVE);
+
+    when(customerService.getByIdentityUserId(identityUserId)).thenReturn(response);
+
+    mockMvc
+        .perform(get("/api/v1/customers/me").with(authenticatedUser(identityUserId)))
+        .andExpect(status().isOk())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+        .andExpect(jsonPath("$.id").value(customerId.toString()))
+        .andExpect(jsonPath("$.identityUserId").value(identityUserId.toString()))
+        .andExpect(jsonPath("$.firstName").value("Test"))
+        .andExpect(jsonPath("$.lastName").value("Customer"))
+        .andExpect(jsonPath("$.status").value("ACTIVE"));
   }
 
   @Test
@@ -103,6 +141,7 @@ class CustomerControllerTest {
     mockMvc
         .perform(
             post("/api/v1/customers")
+                .with(authenticatedUser())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isCreated())
@@ -129,7 +168,11 @@ class CustomerControllerTest {
         """;
 
     mockMvc
-        .perform(post("/api/v1/customers").contentType(MediaType.APPLICATION_JSON).content(request))
+        .perform(
+            post("/api/v1/customers")
+                .with(authenticatedUser())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value(400))
         .andExpect(jsonPath("$.error").value("Bad Request"));
@@ -161,6 +204,7 @@ class CustomerControllerTest {
     mockMvc
         .perform(
             post("/api/v1/customers")
+                .with(authenticatedUser())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isConflict())
@@ -178,7 +222,7 @@ class CustomerControllerTest {
     when(customerService.getById(id)).thenReturn(response);
 
     mockMvc
-        .perform(get("/api/v1/customers/{id}", id))
+        .perform(get("/api/v1/customers/{id}", id).with(authenticatedUser()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(id.toString()))
         .andExpect(jsonPath("$.status").value("ACTIVE"));
@@ -192,7 +236,7 @@ class CustomerControllerTest {
         .thenThrow(new CustomerNotFoundException("Customer not found with id: " + id));
 
     mockMvc
-        .perform(get("/api/v1/customers/{id}", id))
+        .perform(get("/api/v1/customers/{id}", id).with(authenticatedUser()))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.status").value(404))
         .andExpect(jsonPath("$.error").value("Not Found"))
@@ -202,7 +246,7 @@ class CustomerControllerTest {
   @Test
   void shouldReturn400WhenIdIsNotValidUuid() throws Exception {
     mockMvc
-        .perform(get("/api/v1/customers/not-a-uuid"))
+        .perform(get("/api/v1/customers/not-a-uuid").with(authenticatedUser()))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value(400))
         .andExpect(jsonPath("$.message").value("Invalid value for parameter: id"));
@@ -221,7 +265,7 @@ class CustomerControllerTest {
     when(customerService.getAll()).thenReturn(List.of(customer1, customer2));
 
     mockMvc
-        .perform(get("/api/v1/customers"))
+        .perform(get("/api/v1/customers").with(authenticatedUser()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(2))
         .andExpect(jsonPath("$[0].id").value(id1.toString()))
@@ -263,6 +307,7 @@ class CustomerControllerTest {
     mockMvc
         .perform(
             put("/api/v1/customers/{id}/contact", id)
+                .with(authenticatedUser())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isOk())
@@ -278,7 +323,7 @@ class CustomerControllerTest {
     doNothing().when(customerService).archive(id);
 
     mockMvc
-        .perform(delete("/api/v1/customers/{id}", id))
+        .perform(delete("/api/v1/customers/{id}", id).with(authenticatedUser()))
         .andExpect(status().isNoContent())
         .andExpect(content().string(""));
   }
@@ -292,7 +337,7 @@ class CustomerControllerTest {
     when(customerService.activate(id)).thenReturn(response);
 
     mockMvc
-        .perform(patch("/api/v1/customers/{id}/activate", id))
+        .perform(patch("/api/v1/customers/{id}/activate", id).with(authenticatedUser()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(id.toString()))
         .andExpect(jsonPath("$.status").value("ACTIVE"));
@@ -307,7 +352,7 @@ class CustomerControllerTest {
     when(customerService.block(id)).thenReturn(response);
 
     mockMvc
-        .perform(patch("/api/v1/customers/{id}/block", id))
+        .perform(patch("/api/v1/customers/{id}/block", id).with(authenticatedUser()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(id.toString()))
         .andExpect(jsonPath("$.status").value("BLOCKED"));
@@ -322,7 +367,7 @@ class CustomerControllerTest {
     when(customerService.deactivate(id)).thenReturn(response);
 
     mockMvc
-        .perform(patch("/api/v1/customers/{id}/deactivate", id))
+        .perform(patch("/api/v1/customers/{id}/deactivate", id).with(authenticatedUser()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(id.toString()))
         .andExpect(jsonPath("$.status").value("INACTIVE"));
@@ -338,7 +383,7 @@ class CustomerControllerTest {
                 CustomerStatus.INACTIVE, CustomerStatus.ACTIVE));
 
     mockMvc
-        .perform(patch("/api/v1/customers/{id}/activate", id))
+        .perform(patch("/api/v1/customers/{id}/activate", id).with(authenticatedUser()))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.status").value(409))
         .andExpect(jsonPath("$.error").value("Conflict"))
