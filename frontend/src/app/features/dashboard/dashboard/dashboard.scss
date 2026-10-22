@@ -1,0 +1,685 @@
+:host {
+  display: block;
+}
+
+.dashboard {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+/* =========================================================
+   Header
+   ========================================================= */
+
+.dashboard-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+
+  h1 {
+    margin: 0.2rem 0 0.4rem;
+    color: var(--text-primary);
+    font-size: clamp(1.8rem, 7vw, 2.35rem);
+    line-height: 1.08;
+    letter-spacing: -0.04em;
+  }
+}
+
+.eyebrow {
+  margin: 0;
+  color: #3157d5;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.dashboard-intro {
+  max-width: 36rem;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+/* =========================================================
+   Profile shortcut
+   ========================================================= */
+
+.profile-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.8rem;
+  color: var(--text-primary);
+  text-decoration: none;
+  background: #ffffff;
+  border: 1px solid #dfe5ef;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 14px rgb(20 32 55 / 5%);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+
+  > svg {
+    flex: 0 0 auto;
+    width: 1.1rem;
+    height: 1.1rem;
+    margin-left: auto;
+    color: #667085;
+  }
+}
+
+.profile-link:hover {
+  border-color: rgb(49 87 213 / 30%);
+  box-shadow: 0 8px 22px rgb(20 32 55 / 8%);
+  transform: translateY(-1px);
+}
+
+.profile-avatar {
+  display: grid;
+  flex: 0 0 auto;
+  width: 2.65rem;
+  height: 2.65rem;
+  place-items: center;
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #4268df 0%, #2441a4 100%);
+  border-radius: 50%;
+  box-shadow: 0 5px 14px rgb(36 65 164 / 24%);
+}
+
+.profile-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+
+  strong,
+  small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  strong {
+    color: #172033;
+    font-size: 0.9rem;
+  }
+
+  small {
+    color: #667085;
+    font-size: 0.75rem;
+  }
+}
+
+/* =========================================================
+   Main balance
+   ========================================================= */
+
+.balance-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 10.5rem;
+  padding: 1.4rem;
+  color: #ffffff;
+  background:
+    radial-gradient(
+      circle at 92% 8%,
+      rgb(255 255 255 / 18%) 0,
+      rgb(255 255 255 / 8%) 18%,
+      transparent 38%
+    ),
+    linear-gradient(135deg, #3f66df 0%, #3157d5 42%, #263f9f 100%);
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 16px 32px rgb(38 63 159 / 19%),
+    0 5px 12px rgb(38 63 159 / 11%);
+}
+
+.balance-card::before {
+  position: absolute;
+  z-index: -1;
+  top: -5rem;
+  right: -4rem;
+  width: 13rem;
+  height: 13rem;
+  content: '';
+  background: rgb(255 255 255 / 7%);
+  border-radius: 50%;
+}
+
+.balance-card::after {
+  position: absolute;
+  z-index: -1;
+  right: 18%;
+  bottom: -7rem;
+  width: 12rem;
+  height: 12rem;
+  content: '';
+  background: rgb(255 255 255 / 5%);
+  border-radius: 50%;
+}
+
+.balance-card-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.balance-label {
+  margin: 0 0 0.55rem;
+  color: rgb(255 255 255 / 78%);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.balance-value {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(2.15rem, 10vw, 3.45rem);
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.055em;
+  text-shadow: 0 2px 8px rgb(20 30 80 / 12%);
+}
+
+.balance-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 2.8rem;
+  height: 2.8rem;
+  place-items: center;
+  color: #ffffff;
+  background: rgb(255 255 255 / 13%);
+  border: 1px solid rgb(255 255 255 / 17%);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(10px);
+
+  svg {
+    width: 1.4rem;
+    height: 1.4rem;
+  }
+}
+
+.balance-meta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.65rem;
+  padding-top: 1rem;
+  color: rgb(255 255 255 / 75%);
+  font-size: 0.78rem;
+  font-weight: 500;
+  border-top: 1px solid rgb(255 255 255 / 17%);
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: #ffffff;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  svg {
+    width: 0.9rem;
+    height: 0.9rem;
+  }
+}
+
+/* =========================================================
+   Sections
+   ========================================================= */
+
+.quick-actions,
+.accounts-section {
+  margin-top: 2rem;
+}
+
+.section-heading {
+  margin-bottom: 1rem;
+
+  h2 {
+    margin: 0.15rem 0 0;
+    color: #172033;
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+}
+
+.section-heading-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.section-link {
+  flex: 0 0 auto;
+  color: #3157d5;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.section-link:hover {
+  text-decoration: underline;
+}
+
+/* =========================================================
+   Quick actions
+   ========================================================= */
+
+.action-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.action-card {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-height: 5.25rem;
+  padding: 1rem;
+  color: #172033;
+  text-decoration: none;
+  background: #ffffff;
+  border: 1px solid #dfe5ef;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 3px 10px rgb(20 32 55 / 4%);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+
+  strong,
+  small {
+    display: block;
+  }
+
+  strong {
+    margin-bottom: 0.2rem;
+    color: #172033;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  small {
+    color: #667085;
+    font-size: 0.76rem;
+    line-height: 1.35;
+  }
+}
+
+.action-card:hover {
+  border-color: rgb(49 87 213 / 33%);
+  box-shadow: 0 9px 24px rgb(20 32 55 / 8%);
+  transform: translateY(-2px);
+}
+
+.action-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 2.8rem;
+  height: 2.8rem;
+  place-items: center;
+  color: #3157d5;
+  background: #eef2ff;
+  border: 1px solid rgb(49 87 213 / 8%);
+  border-radius: var(--radius-md);
+
+  svg {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+}
+
+.primary-action {
+  border-color: rgb(49 87 213 / 20%);
+
+  .action-icon {
+    color: #ffffff;
+    background: linear-gradient(135deg, #4268df, #2947b7);
+    border-color: transparent;
+    box-shadow: 0 5px 12px rgb(49 87 213 / 20%);
+  }
+}
+
+/* =========================================================
+   Accounts
+   ========================================================= */
+
+.accounts-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.account-card {
+  display: block;
+  padding: 1.1rem;
+  color: #172033;
+  text-decoration: none;
+  background: #ffffff;
+  border: 1px solid #dfe5ef;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 3px 10px rgb(20 32 55 / 4%);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.account-card:hover {
+  border-color: rgb(49 87 213 / 32%);
+  box-shadow: 0 9px 24px rgb(20 32 55 / 8%);
+  transform: translateY(-2px);
+}
+
+.account-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+
+  > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+}
+
+.account-type {
+  color: #344054;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.account-arrow {
+  width: 1rem;
+  height: 1rem;
+  color: #667085;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.55rem;
+  padding: 0.2rem 0.55rem;
+  color: #667085;
+  font-size: 0.65rem;
+  font-weight: 750;
+  background: #f2f4f7;
+  border-radius: 999px;
+}
+
+.status-active {
+  color: #087443;
+  background: #e8f8ef;
+}
+
+.status-blocked {
+  color: #9a5200;
+  background: #fff4dc;
+}
+
+.status-closed {
+  color: #b42318;
+  background: #feeceb;
+}
+
+.account-balance {
+  margin: 1.2rem 0 1.1rem;
+  color: #101828;
+  font-size: clamp(1.65rem, 7vw, 2rem);
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.account-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.9rem;
+  color: #667085;
+  font-size: 0.7rem;
+  font-weight: 500;
+  border-top: 1px solid #eaecf0;
+}
+
+/* =========================================================
+   Empty / Error
+   ========================================================= */
+
+.empty-state,
+.error-state {
+  padding: 2rem 1.25rem;
+  text-align: center;
+  background: #ffffff;
+  border: 1px solid #dfe5ef;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 4px 14px rgb(20 32 55 / 4%);
+}
+
+.empty-icon,
+.error-icon {
+  display: grid;
+  width: 3.25rem;
+  height: 3.25rem;
+  margin: 0 auto 1rem;
+  place-items: center;
+  border-radius: 50%;
+
+  svg {
+    width: 1.55rem;
+    height: 1.55rem;
+  }
+}
+
+.empty-icon {
+  color: #3157d5;
+  background: #eef2ff;
+}
+
+.error-icon {
+  color: #d92d20;
+  background: #fef3f2;
+}
+
+.empty-state {
+  h3 {
+    margin: 0 0 0.4rem;
+    color: #172033;
+    font-size: 1rem;
+  }
+
+  p {
+    max-width: 24rem;
+    margin: 0 auto;
+    color: #667085;
+    font-size: 0.84rem;
+    line-height: 1.5;
+  }
+}
+
+.error-state {
+  max-width: 34rem;
+  margin: 4rem auto;
+
+  h1 {
+    margin: 0 0 0.6rem;
+    color: #172033;
+    font-size: 1.35rem;
+  }
+
+  p {
+    margin: 0;
+    color: #667085;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+}
+
+.retry-button {
+  min-height: 2.75rem;
+  margin-top: 1.25rem;
+  padding: 0.65rem 1.1rem;
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: #3157d5;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.retry-button:hover {
+  background: #294bc0;
+}
+
+/* =========================================================
+   Skeleton
+   ========================================================= */
+
+.dashboard-loading {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.skeleton {
+  overflow: hidden;
+  background: linear-gradient(90deg, #eef1f6 25%, #f7f8fa 50%, #eef1f6 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius-md);
+  animation: skeleton-loading 1.35s infinite linear;
+}
+
+.skeleton-heading {
+  width: 48%;
+  height: 2rem;
+}
+
+.skeleton-subheading {
+  width: 72%;
+  height: 1rem;
+}
+
+.skeleton-balance {
+  height: 10.5rem;
+  margin-top: 0.8rem;
+  border-radius: var(--radius-xl);
+}
+
+.skeleton-actions {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.skeleton-action {
+  height: 5rem;
+}
+
+.skeleton-card {
+  height: 9rem;
+}
+
+@keyframes skeleton-loading {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* =========================================================
+   Tablet
+   ========================================================= */
+
+@media (min-width: 640px) {
+  .dashboard-header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .profile-link {
+    width: auto;
+    min-width: 14rem;
+  }
+
+  .balance-card {
+    padding: 1.7rem;
+  }
+
+  .action-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .action-card {
+    align-items: flex-start;
+    flex-direction: column;
+    min-height: 8.5rem;
+  }
+
+  .accounts-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .skeleton-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* =========================================================
+   Desktop
+   ========================================================= */
+
+@media (min-width: 1024px) {
+  .dashboard-header {
+    margin-bottom: 1.8rem;
+  }
+
+  .balance-card {
+    padding: 2rem;
+  }
+
+  .quick-actions,
+  .accounts-section {
+    margin-top: 2.4rem;
+  }
+
+  .account-card {
+    padding: 1.3rem;
+  }
+}
+
+/* =========================================================
+   Large desktop
+   ========================================================= */
+
+@media (min-width: 1440px) {
+  .accounts-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

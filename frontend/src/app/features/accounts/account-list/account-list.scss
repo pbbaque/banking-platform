@@ -1,0 +1,509 @@
+:host {
+  display: block;
+}
+
+.accounts-page {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+
+  svg {
+    display: block;
+    flex: 0 0 auto;
+  }
+}
+
+/* =========================================================
+   Header
+   ========================================================= */
+
+.page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+
+  h1 {
+    margin: 0.2rem 0 0.45rem;
+    color: #172033;
+    font-size: clamp(1.8rem, 7vw, 2.4rem);
+    line-height: 1.05;
+    letter-spacing: -0.045em;
+  }
+
+  p:not(.eyebrow) {
+    max-width: 35rem;
+    margin: 0;
+    color: #667085;
+    font-size: 0.92rem;
+    line-height: 1.55;
+  }
+}
+
+.eyebrow {
+  margin: 0;
+  color: #3157d5;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/* =========================================================
+   Transfer button
+   ========================================================= */
+
+.transfer-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  gap: 0.55rem;
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+  background: linear-gradient(135deg, #4268df, #2947b7);
+  border-radius: var(--radius-md);
+  box-shadow: 0 7px 18px rgb(49 87 213 / 20%);
+
+  svg {
+    inline-size: 1.1rem;
+    block-size: 1.1rem;
+    min-inline-size: 1.1rem;
+    max-inline-size: 1.1rem;
+    min-block-size: 1.1rem;
+    max-block-size: 1.1rem;
+  }
+}
+
+/* =========================================================
+   Summary
+   ========================================================= */
+
+.summary-card {
+  position: relative;
+  overflow: hidden;
+  padding: 1.35rem;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 90% 10%, rgb(255 255 255 / 15%), transparent 35%),
+    linear-gradient(135deg, #3f66df 0%, #3157d5 45%, #263f9f 100%);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 16px 32px rgb(38 63 159 / 18%);
+
+  strong {
+    display: block;
+    margin-top: 0.4rem;
+    font-size: clamp(2rem, 9vw, 3rem);
+    line-height: 1;
+    letter-spacing: -0.05em;
+  }
+}
+
+.summary-label {
+  color: rgb(255 255 255 / 77%);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.summary-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.45rem;
+  padding-top: 0.95rem;
+  color: rgb(255 255 255 / 74%);
+  font-size: 0.74rem;
+  border-top: 1px solid rgb(255 255 255 / 16%);
+}
+
+/* =========================================================
+   Account section
+   ========================================================= */
+
+.accounts-section {
+  margin-top: 2rem;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+
+  h2 {
+    margin: 0.15rem 0 0;
+    color: #172033;
+    font-size: 1.25rem;
+    letter-spacing: -0.025em;
+  }
+}
+
+.accounts-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.85rem;
+}
+
+/* =========================================================
+   Account card
+   ========================================================= */
+
+.account-card {
+  display: block;
+  min-width: 0;
+  padding: 1.05rem;
+  color: #172033;
+  text-decoration: none;
+  background: #ffffff;
+  border: 1px solid #dfe5ef;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 3px 10px rgb(20 32 55 / 4%);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.account-card:hover {
+  border-color: rgb(49 87 213 / 32%);
+  box-shadow: 0 9px 24px rgb(20 32 55 / 8%);
+  transform: translateY(-2px);
+}
+
+.account-header {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.75rem;
+}
+
+/* =========================================================
+   Account icon
+   ========================================================= */
+
+.account-icon {
+  display: grid;
+  flex: 0 0 2.65rem;
+  inline-size: 2.65rem;
+  block-size: 2.65rem;
+  min-inline-size: 2.65rem;
+  max-inline-size: 2.65rem;
+  min-block-size: 2.65rem;
+  max-block-size: 2.65rem;
+  overflow: hidden;
+  place-items: center;
+  color: #3157d5;
+  background: #eef2ff;
+  border-radius: var(--radius-md);
+
+  svg {
+    inline-size: 1.3rem;
+    block-size: 1.3rem;
+    min-inline-size: 1.3rem;
+    max-inline-size: 1.3rem;
+    min-block-size: 1.3rem;
+    max-block-size: 1.3rem;
+  }
+}
+
+.account-heading {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 0.18rem;
+
+  strong,
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  strong {
+    color: #172033;
+    font-size: 0.86rem;
+  }
+
+  span {
+    color: #667085;
+    font-size: 0.7rem;
+  }
+}
+
+/* =========================================================
+   Account arrow
+   ========================================================= */
+
+.account-arrow {
+  flex: 0 0 1rem;
+  inline-size: 1rem;
+  block-size: 1rem;
+  min-inline-size: 1rem;
+  max-inline-size: 1rem;
+  min-block-size: 1rem;
+  max-block-size: 1rem;
+  margin-left: auto;
+  color: #667085;
+}
+
+/* =========================================================
+   Balance
+   ========================================================= */
+
+.account-balance {
+  margin-top: 1.35rem;
+
+  span {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: #667085;
+    font-size: 0.72rem;
+  }
+
+  strong {
+    color: #101828;
+    font-size: clamp(1.65rem, 7vw, 2rem);
+    line-height: 1;
+    letter-spacing: -0.04em;
+  }
+}
+
+.account-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid #eaecf0;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0.18rem 0.55rem;
+  color: #667085;
+  font-size: 0.64rem;
+  font-weight: 750;
+  background: #f2f4f7;
+  border-radius: 999px;
+}
+
+.status-active {
+  color: #087443;
+  background: #e8f8ef;
+}
+
+.status-blocked {
+  color: #9a5200;
+  background: #fff4dc;
+}
+
+.status-closed {
+  color: #b42318;
+  background: #feeceb;
+}
+
+.currency-code {
+  color: #667085;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+/* =========================================================
+   Empty / error states
+   ========================================================= */
+
+.empty-state,
+.error-state {
+  padding: 2rem 1.25rem;
+  text-align: center;
+  background: #ffffff;
+  border: 1px solid #dfe5ef;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 4px 14px rgb(20 32 55 / 4%);
+}
+
+.empty-state {
+  margin-top: 2rem;
+
+  h2 {
+    margin: 0 0 0.45rem;
+    color: #172033;
+    font-size: 1.05rem;
+  }
+
+  p {
+    max-width: 24rem;
+    margin: 0 auto;
+    color: #667085;
+    font-size: 0.84rem;
+    line-height: 1.5;
+  }
+}
+
+.error-state {
+  max-width: 34rem;
+  margin: 4rem auto;
+
+  h1 {
+    margin: 0 0 0.6rem;
+    color: #172033;
+    font-size: 1.35rem;
+  }
+
+  p {
+    margin: 0;
+    color: #667085;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+}
+
+/* =========================================================
+   State icons
+   ========================================================= */
+
+.state-icon {
+  display: grid;
+  inline-size: 3.25rem;
+  block-size: 3.25rem;
+  min-inline-size: 3.25rem;
+  max-inline-size: 3.25rem;
+  min-block-size: 3.25rem;
+  max-block-size: 3.25rem;
+  margin: 0 auto 1rem;
+  overflow: hidden;
+  place-items: center;
+  color: #3157d5;
+  background: #eef2ff;
+  border-radius: 50%;
+
+  svg {
+    inline-size: 1.55rem;
+    block-size: 1.55rem;
+    min-inline-size: 1.55rem;
+    max-inline-size: 1.55rem;
+    min-block-size: 1.55rem;
+    max-block-size: 1.55rem;
+  }
+}
+
+.state-icon-error {
+  color: #d92d20;
+  background: #fef3f2;
+}
+
+.retry-button {
+  min-height: 2.75rem;
+  margin-top: 1.25rem;
+  padding: 0.65rem 1.1rem;
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: #3157d5;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+/* =========================================================
+   Loading
+   ========================================================= */
+
+.loading-state {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.skeleton {
+  overflow: hidden;
+  background: linear-gradient(90deg, #eef1f6 25%, #f7f8fa 50%, #eef1f6 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius-md);
+  animation: skeleton-loading 1.35s infinite linear;
+}
+
+.skeleton-title {
+  width: 45%;
+  height: 2.2rem;
+}
+
+.skeleton-summary {
+  height: 9.5rem;
+  margin-bottom: 0.75rem;
+  border-radius: var(--radius-xl);
+}
+
+.skeleton-card {
+  height: 10.5rem;
+}
+
+@keyframes skeleton-loading {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* =========================================================
+   Tablet
+   ========================================================= */
+
+@media (min-width: 640px) {
+  .page-header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .transfer-button {
+    flex: 0 0 auto;
+  }
+
+  .summary-card {
+    padding: 1.7rem;
+  }
+
+  .accounts-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* =========================================================
+   Desktop
+   ========================================================= */
+
+@media (min-width: 1024px) {
+  .summary-card {
+    padding: 2rem;
+  }
+
+  .accounts-section {
+    margin-top: 2.4rem;
+  }
+
+  .account-card {
+    padding: 1.25rem;
+  }
+}
+
+/* =========================================================
+   Large desktop
+   ========================================================= */
+
+@media (min-width: 1440px) {
+  .accounts-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
