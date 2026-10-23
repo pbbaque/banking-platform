@@ -13,14 +13,36 @@
       </span>
     </a>
 
-    <button
-      type="button"
-      class="mobile-profile-button"
-      aria-label="Cerrar sesión"
-      (click)="logout()"
-    >
-      PB
-    </button>
+    <details #profileMenu class="mobile-profile-menu">
+      <summary class="mobile-profile-button" aria-label="Abrir menú de usuario">PB</summary>
+
+      <div class="mobile-profile-dropdown">
+        <a routerLink="/profile" class="profile-menu-item" (click)="closeProfileMenu()">
+          <span class="profile-menu-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="8" r="3.5" />
+              <path d="M5.5 20c.6-4 2.8-6 6.5-6s5.9 2 6.5 6" />
+            </svg>
+          </span>
+
+          <span>Perfil</span>
+        </a>
+
+        <div class="profile-menu-divider"></div>
+
+        <button type="button" class="profile-menu-item profile-menu-logout" (click)="logout()">
+          <span class="profile-menu-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M10 5H6.5A2.5 2.5 0 0 0 4 7.5v9A2.5 2.5 0 0 0 6.5 19H10" />
+              <path d="M14 8l4 4-4 4" />
+              <path d="M9 12h9" />
+            </svg>
+          </span>
+
+          <span>Cerrar sesión</span>
+        </button>
+      </div>
+    </details>
   </header>
 
   <aside class="sidebar">
@@ -79,17 +101,6 @@
           <span>Transferencias</span>
         </a>
 
-        <a routerLink="/profile" routerLinkActive="active">
-          <span class="nav-icon">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="8" r="3.5" />
-              <path d="M5.5 20c.6-4 2.8-6 6.5-6s5.9 2 6.5 6" />
-            </svg>
-          </span>
-
-          <span>Perfil</span>
-        </a>
-
         <a routerLink="/audit" routerLinkActive="active" class="audit-link">
           <span class="nav-icon">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -106,14 +117,20 @@
     </div>
 
     <div class="sidebar-footer">
-      <div class="user-card">
+      <a routerLink="/profile" class="user-card" aria-label="Abrir perfil">
         <div class="user-avatar">PB</div>
 
         <div class="user-copy">
           <strong>Tu cuenta</strong>
-          <small>Sesión iniciada</small>
+          <small>Ver perfil</small>
         </div>
-      </div>
+
+        <span class="user-chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+        </span>
+      </a>
 
       <button type="button" class="logout" (click)="logout()">
         <span class="logout-icon">

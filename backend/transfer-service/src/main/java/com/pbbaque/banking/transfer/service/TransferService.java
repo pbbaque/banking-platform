@@ -8,8 +8,10 @@ import com.pbbaque.banking.transfer.domain.Transfer;
 import com.pbbaque.banking.transfer.domain.TransferProcessingStage;
 import com.pbbaque.banking.transfer.domain.TransferStatus;
 import com.pbbaque.banking.transfer.dto.AccountOperationResponse;
+import com.pbbaque.banking.transfer.dto.AccountResponse;
 import com.pbbaque.banking.transfer.dto.AuditEventMessage;
 import com.pbbaque.banking.transfer.dto.CreateTransferRequest;
+import com.pbbaque.banking.transfer.dto.TransferDetailResponse;
 import com.pbbaque.banking.transfer.exception.AccountServiceException;
 import com.pbbaque.banking.transfer.exception.IdempotencyConflictException;
 import com.pbbaque.banking.transfer.exception.TransferNotFoundException;
@@ -72,36 +74,42 @@ public class TransferService {
    *
    * @param request transfer request
    * @param accessToken authenticated user's JWT
+   * @param actorId authenticated user's identity identifier
    * @return processed transfer
    */
-  public Transfer createTransfer(CreateTransferRequest request, String accessToken) {
+  public Transfer createTransfer(CreateTransferRequest request, String accessToken, UUID actorId) {
 
     requireAccountOwnership(request.sourceAccountId(), accessToken);
+
+    AccountResponse destinationAccount =
+        accountClient.getAccountByIban(request.destinationIban().trim());
+
+    UUID destinationAccountId = destinationAccount.id();
 
     Transfer existingTransfer =
         transferRepository.findByIdempotencyKey(request.idempotencyKey()).orElse(null);
 
     if (existingTransfer != null) {
-      validateIdempotentRequest(existingTransfer, request);
+      validateIdempotentRequest(existingTransfer, request, destinationAccountId);
 
       if (existingTransfer.isTerminal()) {
         return existingTransfer;
       }
 
-      return resumeTransfer(existingTransfer);
+      return resumeTransfer(existingTransfer, actorId);
     }
 
     Transfer transfer =
         Transfer.create(
             request.sourceAccountId(),
-            request.destinationAccountId(),
+            destinationAccountId,
             request.amount(),
             request.currency(),
             request.idempotencyKey());
 
     transfer = transferRepository.save(transfer);
 
-    return resumeTransfer(transfer);
+    return resumeTransfer(transfer, actorId);
   }
 
   /**
@@ -121,6 +129,32 @@ public class TransferService {
     requireTransferOwnership(transfer, accessToken);
 
     return transfer;
+  }
+
+  /**
+   * Returns the complete information required to display a transfer detail.
+   *
+   * <p>The authenticated user must own either the source or destination account. Account
+   * information is retrieved through the internal account-service API only after access to the
+   * transfer has been validated.
+   *
+   * @param transferId transfer identifier
+   * @param accessToken authenticated user's JWT
+   * @return detailed transfer information
+   */
+  public TransferDetailResponse getDetailById(UUID transferId, String accessToken) {
+
+    Transfer transfer = getById(transferId, accessToken);
+
+    AccountResponse sourceAccount = accountClient.getAccount(transfer.getSourceAccountId());
+
+    AccountResponse destinationAccount =
+        accountClient.getAccount(transfer.getDestinationAccountId());
+
+    BigDecimal balanceAfter = getBalanceAfterForUser(transfer, accessToken);
+
+    return TransferDetailResponse.from(
+        transfer, sourceAccount.iban(), destinationAccount.iban(), balanceAfter);
   }
 
   /**
@@ -174,6 +208,7 @@ public class TransferService {
     if (accountId.equals(transfer.getSourceAccountId())) {
 
       if (transfer.getStatus() == TransferStatus.FAILED) {
+
         AccountOperationResponse compensation =
             accountClient
                 .findOperation(accountOperationIdFactory.compensation(transferId))
@@ -227,7 +262,8 @@ public class TransferService {
     }
   }
 
-  private Transfer resumeTransfer(Transfer transfer) {
+  private Transfer resumeTransfer(Transfer transfer, UUID actorId) {
+
     if (!transfer.isResumable()) {
       if (transfer.getProcessingStage() == TransferProcessingStage.RECOVERY_REQUIRED) {
 
@@ -239,11 +275,11 @@ public class TransferService {
     }
 
     return switch (transfer.getProcessingStage()) {
-      case DEBIT_PENDING -> processDebit(transfer);
+      case DEBIT_PENDING -> processDebit(transfer, actorId);
 
-      case CREDIT_PENDING -> processCredit(transfer);
+      case CREDIT_PENDING -> processCredit(transfer, actorId);
 
-      case COMPENSATION_PENDING -> processCompensation(transfer, null);
+      case COMPENSATION_PENDING -> processCompensation(transfer, null, actorId);
 
       case TERMINAL -> transfer;
 
@@ -253,7 +289,8 @@ public class TransferService {
     };
   }
 
-  private Transfer processDebit(Transfer transfer) {
+  private Transfer processDebit(Transfer transfer, UUID actorId) {
+
     UUID transferId = requireTransferId(transfer);
 
     UUID debitOperationId = accountOperationIdFactory.debit(transferId);
@@ -273,18 +310,21 @@ public class TransferService {
           transfer,
           FAILED_EVENT_TYPE,
           "FAILURE",
-          "Transfer failed because the source account could not be debited");
+          "Transfer failed because the source account could not be debited",
+          actorId);
 
       throw exception;
     }
 
     transfer.markDebitCompleted();
+
     transfer = transferRepository.save(transfer);
 
-    return processCredit(transfer);
+    return processCredit(transfer, actorId);
   }
 
-  private Transfer processCredit(Transfer transfer) {
+  private Transfer processCredit(Transfer transfer, UUID actorId) {
+
     UUID transferId = requireTransferId(transfer);
 
     UUID creditOperationId = accountOperationIdFactory.credit(transferId);
@@ -300,19 +340,20 @@ public class TransferService {
       }
 
       transfer.markCompensationPending();
+
       transfer = transferRepository.save(transfer);
 
-      return processCompensation(transfer, creditException);
+      return processCompensation(transfer, creditException, actorId);
     }
 
     transfer.complete();
 
     return persistTransferWithAudit(
-        transfer, COMPLETED_EVENT_TYPE, "SUCCESS", "Transfer completed successfully");
+        transfer, COMPLETED_EVENT_TYPE, "SUCCESS", "Transfer completed successfully", actorId);
   }
 
   private Transfer processCompensation(
-      Transfer transfer, AccountServiceException originalException) {
+      Transfer transfer, AccountServiceException originalException, UUID actorId) {
 
     UUID transferId = requireTransferId(transfer);
 
@@ -329,7 +370,8 @@ public class TransferService {
           FAILED_EVENT_TYPE,
           "FAILURE",
           "Transfer failed because the destination account could not be credited; "
-              + "the source debit was compensated");
+              + "the source debit was compensated",
+          actorId);
 
     } catch (AccountServiceException compensationException) {
 
@@ -348,7 +390,8 @@ public class TransferService {
           transfer,
           FAILED_EVENT_TYPE,
           "FAILURE",
-          "Transfer failed and the source account compensation also failed");
+          "Transfer failed and the source account compensation also failed",
+          actorId);
 
       if (originalException != null) {
         compensationException.addSuppressed(originalException);
@@ -398,7 +441,7 @@ public class TransferService {
   }
 
   private Transfer persistTransferWithAudit(
-      Transfer transfer, String eventType, String outcome, String description) {
+      Transfer transfer, String eventType, String outcome, String description, UUID actorId) {
 
     UUID transferId = requireTransferId(transfer);
 
@@ -412,7 +455,7 @@ public class TransferService {
             eventType,
             AGGREGATE_TYPE,
             transferId.toString(),
-            null,
+            actorId,
             outcome,
             description,
             createMetadata(transfer),
@@ -467,6 +510,7 @@ public class TransferService {
       return objectMapper.writeValueAsString(event);
 
     } catch (JsonProcessingException exception) {
+
       throw new IllegalStateException("Unable to serialize transfer audit event", exception);
     }
   }
@@ -482,11 +526,12 @@ public class TransferService {
     return transferId;
   }
 
-  private void validateIdempotentRequest(Transfer existingTransfer, CreateTransferRequest request) {
+  private void validateIdempotentRequest(
+      Transfer existingTransfer, CreateTransferRequest request, UUID destinationAccountId) {
 
     boolean sameRequest =
         existingTransfer.getSourceAccountId().equals(request.sourceAccountId())
-            && existingTransfer.getDestinationAccountId().equals(request.destinationAccountId())
+            && existingTransfer.getDestinationAccountId().equals(destinationAccountId)
             && existingTransfer.getAmount().compareTo(request.amount()) == 0
             && existingTransfer.getCurrency().equalsIgnoreCase(request.currency().trim());
 

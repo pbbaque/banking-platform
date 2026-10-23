@@ -12,14 +12,14 @@ import java.util.UUID;
  * Request used to create a banking transfer.
  *
  * @param sourceAccountId source account identifier
- * @param destinationAccountId destination account identifier
+ * @param destinationIban destination account IBAN
  * @param amount amount to transfer
  * @param currency transfer currency
  * @param idempotencyKey unique key used to prevent duplicate processing
  */
 public record CreateTransferRequest(
     @NotNull UUID sourceAccountId,
-    @NotNull UUID destinationAccountId,
+    @NotBlank @Size(max = 34) String destinationIban,
     @NotNull @DecimalMin(value = "0.0001") @Digits(integer = 15, fraction = 4) BigDecimal amount,
     @NotBlank @Size(max = 3) String currency,
     @NotBlank @Size(max = 100) String idempotencyKey) {}

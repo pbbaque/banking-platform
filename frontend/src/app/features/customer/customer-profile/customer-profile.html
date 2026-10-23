@@ -1,1 +1,448 @@
-<p>customer-profile works!</p>
+<section class="profile-page">
+  @if (loading()) {
+    <div class="loading-state" aria-label="Cargando perfil">
+      <div class="skeleton skeleton-hero"></div>
+      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card"></div>
+    </div>
+  } @else if (loadError()) {
+    <div class="error-state">
+      <div class="state-icon">
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+        >
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M12 7v6"></path>
+          <path d="M12 17h.01"></path>
+        </svg>
+      </div>
+
+      <h1>No hemos podido cargar tu perfil</h1>
+
+      <p>{{ loadError() }}</p>
+
+      <button type="button" class="secondary-button" (click)="loadCustomer()">Reintentar</button>
+    </div>
+  } @else if (customer(); as customer) {
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Área personal</p>
+        <h1>Mi perfil</h1>
+
+        <p class="page-description">
+          Consulta tus datos personales y mantén actualizada tu información de contacto.
+        </p>
+      </div>
+
+      @if (!editing()) {
+        <button type="button" class="edit-button" (click)="startEditing()">
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+          >
+            <path d="M14.5 5.5 18.5 9.5"></path>
+            <path
+              d="M5 19l3.5-.8L18 8.7a1.4 1.4 0 0 0 0-2L17.3 6a1.4 1.4 0 0 0-2 0L5.8 15.5 5 19Z"
+            ></path>
+          </svg>
+
+          Editar datos
+        </button>
+      }
+    </header>
+
+    @if (saveSuccess()) {
+      <div class="success-message" role="status">
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="m8 12 2.5 2.5L16 9"></path>
+        </svg>
+
+        <span> Tus datos de contacto se han actualizado correctamente. </span>
+      </div>
+    }
+
+    <section class="profile-hero">
+      <div class="avatar">
+        {{ initials() }}
+      </div>
+
+      <div class="profile-identity">
+        <div class="profile-name-row">
+          <h2>{{ fullName() }}</h2>
+
+          <span
+            class="status-badge"
+            [class.status-active]="customer.status === 'ACTIVE'"
+            [class.status-pending]="customer.status === 'PENDING_VERIFICATION'"
+            [class.status-blocked]="customer.status === 'BLOCKED'"
+            [class.status-inactive]="customer.status === 'INACTIVE'"
+          >
+            {{ statusLabel(customer.status) }}
+          </span>
+        </div>
+
+        <p>
+          Cliente desde
+          {{ customer.createdAt | date: 'dd/MM/yyyy' }}
+        </p>
+      </div>
+    </section>
+
+    <div class="profile-grid">
+      <section class="profile-card">
+        <div class="section-heading">
+          <div class="heading-icon">
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+            >
+              <circle cx="12" cy="8" r="3.5"></circle>
+              <path d="M5.5 19c.8-3.4 3-5 6.5-5s5.7 1.6 6.5 5"></path>
+            </svg>
+          </div>
+
+          <div>
+            <p class="eyebrow">Identificación</p>
+            <h2>Datos personales</h2>
+          </div>
+        </div>
+
+        <div class="data-list">
+          <div class="data-row">
+            <span>Nombre</span>
+            <strong>
+              {{ customer.firstName }}
+            </strong>
+          </div>
+
+          <div class="data-row">
+            <span>Apellidos</span>
+            <strong>
+              {{ customer.lastName }}
+            </strong>
+          </div>
+
+          <div class="data-row">
+            <span>Documento</span>
+
+            <strong>
+              {{ documentTypeLabel(customer.documentType) }}
+              {{ customer.documentNumber }}
+            </strong>
+          </div>
+
+          <div class="data-row">
+            <span>Fecha de nacimiento</span>
+
+            <strong>
+              {{ customer.dateOfBirth | date: 'dd/MM/yyyy' }}
+            </strong>
+          </div>
+        </div>
+
+        <div class="locked-note">
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+          >
+            <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+            <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+          </svg>
+
+          <span>
+            Por seguridad, los datos de identidad no pueden modificarse desde esta pantalla.
+          </span>
+        </div>
+      </section>
+
+      <section class="profile-card contact-card">
+        <div class="section-heading contact-heading">
+          <div class="heading-icon">
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+            >
+              <path
+                d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5Z"
+              ></path>
+              <path d="m5 7 7 5 7-5"></path>
+            </svg>
+          </div>
+
+          <div>
+            <p class="eyebrow">Contacto</p>
+            <h2>Datos de contacto</h2>
+          </div>
+        </div>
+
+        @if (!editing()) {
+          <div class="data-list">
+            <div class="data-row">
+              <span>Teléfono</span>
+
+              <strong>
+                {{ customer.phoneNumber }}
+              </strong>
+            </div>
+
+            <div class="data-row">
+              <span>Dirección fiscal</span>
+
+              <strong>
+                {{ customer.fiscalAddress }}
+              </strong>
+            </div>
+
+            <div class="data-row">
+              <span>Código postal</span>
+
+              <strong>
+                {{ customer.postalCode }}
+              </strong>
+            </div>
+
+            <div class="data-row">
+              <span>Ciudad</span>
+
+              <strong>
+                {{ customer.city }}
+              </strong>
+            </div>
+
+            <div class="data-row">
+              <span>País</span>
+
+              <strong>
+                {{ countryLabel(customer.countryCode) }}
+              </strong>
+            </div>
+          </div>
+        } @else {
+          <form class="contact-form" [formGroup]="form" (ngSubmit)="save()">
+            <div class="field-group">
+              <label for="phoneNumber"> Teléfono </label>
+
+              <div
+                class="input-shell"
+                [class.input-error]="
+                  form.controls.phoneNumber.touched && form.controls.phoneNumber.invalid
+                "
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  <path
+                    d="M7 4h3l1 4-2 1.5a14 14 0 0 0 5.5 5.5l1.5-2 4 1v3c0 1.1-.9 2-2 2C10.3 19 5 13.7 5 7a3 3 0 0 1 2-3Z"
+                  ></path>
+                </svg>
+
+                <input
+                  id="phoneNumber"
+                  type="tel"
+                  formControlName="phoneNumber"
+                  autocomplete="tel"
+                />
+              </div>
+
+              @if (form.controls.phoneNumber.touched && form.controls.phoneNumber.invalid) {
+                <p class="field-error">Introduce un teléfono válido.</p>
+              }
+            </div>
+
+            <div class="field-group field-full">
+              <label for="fiscalAddress"> Dirección fiscal </label>
+
+              <div
+                class="input-shell"
+                [class.input-error]="
+                  form.controls.fiscalAddress.touched && form.controls.fiscalAddress.invalid
+                "
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  <path d="M12 21s6-5.1 6-11a6 6 0 1 0-12 0c0 5.9 6 11 6 11Z"></path>
+                  <circle cx="12" cy="10" r="2"></circle>
+                </svg>
+
+                <input
+                  id="fiscalAddress"
+                  type="text"
+                  formControlName="fiscalAddress"
+                  autocomplete="street-address"
+                />
+              </div>
+
+              @if (form.controls.fiscalAddress.touched && form.controls.fiscalAddress.invalid) {
+                <p class="field-error">Introduce una dirección válida.</p>
+              }
+            </div>
+
+            <div class="field-group">
+              <label for="postalCode"> Código postal </label>
+
+              <div
+                class="input-shell"
+                [class.input-error]="
+                  form.controls.postalCode.touched && form.controls.postalCode.invalid
+                "
+              >
+                <input
+                  id="postalCode"
+                  type="text"
+                  formControlName="postalCode"
+                  autocomplete="postal-code"
+                />
+              </div>
+
+              @if (form.controls.postalCode.touched && form.controls.postalCode.invalid) {
+                <p class="field-error">Introduce un código postal válido.</p>
+              }
+            </div>
+
+            <div class="field-group">
+              <label for="city"> Ciudad </label>
+
+              <div
+                class="input-shell"
+                [class.input-error]="form.controls.city.touched && form.controls.city.invalid"
+              >
+                <input id="city" type="text" formControlName="city" autocomplete="address-level2" />
+              </div>
+
+              @if (form.controls.city.touched && form.controls.city.invalid) {
+                <p class="field-error">Introduce una ciudad válida.</p>
+              }
+            </div>
+
+            <div class="field-group">
+              <label for="countryCode"> País </label>
+
+              <div
+                class="input-shell country-input"
+                [class.input-error]="
+                  form.controls.countryCode.touched && form.controls.countryCode.invalid
+                "
+              >
+                <input
+                  id="countryCode"
+                  type="text"
+                  maxlength="2"
+                  formControlName="countryCode"
+                  autocomplete="country"
+                  placeholder="ES"
+                />
+              </div>
+
+              @if (form.controls.countryCode.touched && form.controls.countryCode.invalid) {
+                <p class="field-error">Introduce el código de país de dos letras.</p>
+              }
+            </div>
+
+            @if (saveError()) {
+              <div class="save-error" role="alert">
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  <circle cx="12" cy="12" r="9"></circle>
+                  <path d="M12 7v6"></path>
+                  <path d="M12 17h.01"></path>
+                </svg>
+
+                <span>{{ saveError() }}</span>
+              </div>
+            }
+
+            <div class="form-actions">
+              <button
+                type="button"
+                class="cancel-button"
+                [disabled]="saving()"
+                (click)="cancelEditing()"
+              >
+                Cancelar
+              </button>
+
+              <button type="submit" class="save-button" [disabled]="form.invalid || saving()">
+                @if (saving()) {
+                  <span class="button-spinner"></span>
+
+                  Guardando...
+                } @else {
+                  Guardar cambios
+
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                  >
+                    <path d="m7 12 3 3 7-7"></path>
+                  </svg>
+                }
+              </button>
+            </div>
+          </form>
+        }
+      </section>
+    </div>
+
+    <section class="technical-card">
+      <div>
+        <p class="eyebrow">Cuenta</p>
+        <h2>Información del perfil</h2>
+      </div>
+
+      <div class="technical-list">
+        <div class="technical-row">
+          <span>Identificador de cliente</span>
+          <code>{{ customer.id }}</code>
+        </div>
+
+        <div class="technical-row">
+          <span>Última actualización</span>
+
+          <strong>
+            {{ customer.updatedAt | date: 'dd/MM/yyyy · HH:mm' }}
+          </strong>
+        </div>
+      </div>
+    </section>
+  }
+</section>

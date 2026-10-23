@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -16,6 +17,7 @@ import com.pbbaque.banking.transfer.domain.OutboxEvent;
 import com.pbbaque.banking.transfer.domain.Transfer;
 import com.pbbaque.banking.transfer.domain.TransferProcessingStage;
 import com.pbbaque.banking.transfer.domain.TransferStatus;
+import com.pbbaque.banking.transfer.dto.AccountResponse;
 import com.pbbaque.banking.transfer.dto.CreateTransferRequest;
 import com.pbbaque.banking.transfer.exception.AccountServiceException;
 import com.pbbaque.banking.transfer.exception.IdempotencyConflictException;
@@ -48,6 +50,10 @@ class TransferServiceTest {
 
   private static final UUID TRANSFER_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
 
+  private static final UUID ACTOR_ID = UUID.fromString("44444444-4444-4444-4444-444444444444");
+
+  private static final String DESTINATION_IBAN = "ES6421000418450200051333";
+
   private static final BigDecimal AMOUNT = new BigDecimal("100.0000");
 
   private static final String IDEMPOTENCY_KEY = "transfer-key-1";
@@ -71,6 +77,7 @@ class TransferServiceTest {
     accountOperationIdFactory = new AccountOperationIdFactory();
 
     ObjectMapper objectMapper = new ObjectMapper();
+
     objectMapper.registerModule(new JavaTimeModule());
 
     transferService =
@@ -85,6 +92,7 @@ class TransferServiceTest {
 
   @Test
   void shouldCreateCompletedTransferAndOutboxEvent() {
+    prepareDestinationAccountLookup();
     prepareNewTransferPersistence();
     prepareTransactionManager();
 
@@ -92,13 +100,15 @@ class TransferServiceTest {
 
     UUID creditOperationId = accountOperationIdFactory.credit(TRANSFER_ID);
 
-    Transfer result = transferService.createTransfer(createRequest(), ACCESS_TOKEN);
+    Transfer result = transferService.createTransfer(createRequest(), ACCESS_TOKEN, ACTOR_ID);
 
     assertEquals(TransferStatus.COMPLETED, result.getStatus());
 
     assertEquals(TransferProcessingStage.TERMINAL, result.getProcessingStage());
 
     verify(accountClient).getOwnedAccount(SOURCE_ACCOUNT_ID, ACCESS_TOKEN);
+
+    verify(accountClient).getAccountByIban(DESTINATION_IBAN);
 
     verify(accountClient).debit(SOURCE_ACCOUNT_ID, AMOUNT, debitOperationId);
 
@@ -111,16 +121,20 @@ class TransferServiceTest {
 
   @Test
   void shouldReturnExistingTerminalTransferWithoutProcessingAgain() {
+    prepareDestinationAccountLookup();
+
     Transfer existingTransfer = createCompletedTransfer();
 
     when(transferRepository.findByIdempotencyKey(IDEMPOTENCY_KEY))
         .thenReturn(Optional.of(existingTransfer));
 
-    Transfer result = transferService.createTransfer(createRequest(), ACCESS_TOKEN);
+    Transfer result = transferService.createTransfer(createRequest(), ACCESS_TOKEN, ACTOR_ID);
 
     assertSame(existingTransfer, result);
 
     verify(accountClient).getOwnedAccount(SOURCE_ACCOUNT_ID, ACCESS_TOKEN);
+
+    verify(accountClient).getAccountByIban(DESTINATION_IBAN);
 
     verify(accountClient, never()).debit(any(), any(), any());
 
@@ -133,6 +147,7 @@ class TransferServiceTest {
 
   @Test
   void shouldResumeTransferFromDebitPending() {
+    prepareDestinationAccountLookup();
     prepareTransferSave();
     prepareTransactionManager();
 
@@ -145,7 +160,7 @@ class TransferServiceTest {
 
     UUID creditOperationId = accountOperationIdFactory.credit(TRANSFER_ID);
 
-    Transfer result = transferService.createTransfer(createRequest(), ACCESS_TOKEN);
+    Transfer result = transferService.createTransfer(createRequest(), ACCESS_TOKEN, ACTOR_ID);
 
     assertEquals(TransferStatus.COMPLETED, result.getStatus());
 
@@ -162,6 +177,7 @@ class TransferServiceTest {
 
   @Test
   void shouldResumeTransferFromCreditPendingWithoutRepeatingDebit() {
+    prepareDestinationAccountLookup();
     prepareTransferSave();
     prepareTransactionManager();
 
@@ -172,7 +188,7 @@ class TransferServiceTest {
 
     UUID creditOperationId = accountOperationIdFactory.credit(TRANSFER_ID);
 
-    Transfer result = transferService.createTransfer(createRequest(), ACCESS_TOKEN);
+    Transfer result = transferService.createTransfer(createRequest(), ACCESS_TOKEN, ACTOR_ID);
 
     assertEquals(TransferStatus.COMPLETED, result.getStatus());
 
@@ -187,6 +203,7 @@ class TransferServiceTest {
 
   @Test
   void shouldResumeTransferFromCompensationPending() {
+    prepareDestinationAccountLookup();
     prepareTransferSave();
     prepareTransactionManager();
 
@@ -197,14 +214,14 @@ class TransferServiceTest {
 
     UUID compensationOperationId = accountOperationIdFactory.compensation(TRANSFER_ID);
 
-    Transfer result = transferService.createTransfer(createRequest(), ACCESS_TOKEN);
+    Transfer result = transferService.createTransfer(createRequest(), ACCESS_TOKEN, ACTOR_ID);
 
     assertEquals(TransferStatus.FAILED, result.getStatus());
 
     assertEquals(TransferProcessingStage.TERMINAL, result.getProcessingStage());
 
     assertEquals(
-        "Destination account could not be credited; " + "source debit was compensated",
+        "Destination account could not be credited; source debit was compensated",
         result.getFailureReason());
 
     verify(accountClient, never()).debit(any(), any(), any());
@@ -218,6 +235,8 @@ class TransferServiceTest {
 
   @Test
   void shouldRejectAutomaticRecoveryWhenProcessingStageIsUnknown() {
+    prepareDestinationAccountLookup();
+
     Transfer transfer = createTransferAtStage(TransferProcessingStage.RECOVERY_REQUIRED);
 
     when(transferRepository.findByIdempotencyKey(IDEMPOTENCY_KEY))
@@ -225,7 +244,7 @@ class TransferServiceTest {
 
     assertThrows(
         IllegalStateException.class,
-        () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN));
+        () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN, ACTOR_ID));
 
     verify(accountClient, never()).debit(any(), any(), any());
 
@@ -238,6 +257,7 @@ class TransferServiceTest {
 
   @Test
   void shouldFailTransferAndCreateOutboxEventWhenDebitIsRejected() {
+    prepareDestinationAccountLookup();
     prepareNewTransferPersistence();
     prepareTransactionManager();
 
@@ -254,7 +274,7 @@ class TransferServiceTest {
     AccountServiceException thrown =
         assertThrows(
             AccountServiceException.class,
-            () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN));
+            () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN, ACTOR_ID));
 
     assertSame(exception, thrown);
 
@@ -267,6 +287,7 @@ class TransferServiceTest {
 
   @Test
   void shouldKeepDebitPendingWhenDebitCommunicationFails() {
+    prepareDestinationAccountLookup();
     prepareNewTransferPersistence();
 
     UUID debitOperationId = accountOperationIdFactory.debit(TRANSFER_ID);
@@ -280,7 +301,7 @@ class TransferServiceTest {
     AccountServiceException thrown =
         assertThrows(
             AccountServiceException.class,
-            () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN));
+            () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN, ACTOR_ID));
 
     assertSame(exception, thrown);
 
@@ -293,6 +314,7 @@ class TransferServiceTest {
 
   @Test
   void shouldKeepCreditPendingWhenCreditCommunicationFails() {
+    prepareDestinationAccountLookup();
     prepareNewTransferPersistence();
 
     UUID creditOperationId = accountOperationIdFactory.credit(TRANSFER_ID);
@@ -307,7 +329,7 @@ class TransferServiceTest {
     AccountServiceException thrown =
         assertThrows(
             AccountServiceException.class,
-            () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN));
+            () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN, ACTOR_ID));
 
     assertSame(exception, thrown);
 
@@ -321,6 +343,7 @@ class TransferServiceTest {
 
   @Test
   void shouldCompensateWhenDestinationCreditIsRejected() {
+    prepareDestinationAccountLookup();
     prepareNewTransferPersistence();
     prepareTransactionManager();
 
@@ -337,14 +360,14 @@ class TransferServiceTest {
     when(accountClient.credit(DESTINATION_ACCOUNT_ID, AMOUNT, creditOperationId))
         .thenThrow(creditException);
 
-    Transfer result = transferService.createTransfer(createRequest(), ACCESS_TOKEN);
+    Transfer result = transferService.createTransfer(createRequest(), ACCESS_TOKEN, ACTOR_ID);
 
     assertEquals(TransferStatus.FAILED, result.getStatus());
 
     assertEquals(TransferProcessingStage.TERMINAL, result.getProcessingStage());
 
     assertEquals(
-        "Destination account could not be credited; " + "source debit was compensated",
+        "Destination account could not be credited; source debit was compensated",
         result.getFailureReason());
 
     verify(accountClient).credit(SOURCE_ACCOUNT_ID, AMOUNT, compensationOperationId);
@@ -356,6 +379,7 @@ class TransferServiceTest {
 
   @Test
   void shouldFailTerminallyWhenCompensationIsRejected() {
+    prepareDestinationAccountLookup();
     prepareNewTransferPersistence();
     prepareTransactionManager();
 
@@ -384,7 +408,7 @@ class TransferServiceTest {
     AccountServiceException thrown =
         assertThrows(
             AccountServiceException.class,
-            () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN));
+            () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN, ACTOR_ID));
 
     assertSame(compensationException, thrown);
 
@@ -399,6 +423,7 @@ class TransferServiceTest {
 
   @Test
   void shouldKeepCompensationPendingWhenCommunicationFails() {
+    prepareDestinationAccountLookup();
     prepareNewTransferPersistence();
 
     UUID creditOperationId = accountOperationIdFactory.credit(TRANSFER_ID);
@@ -424,7 +449,7 @@ class TransferServiceTest {
     AccountServiceException thrown =
         assertThrows(
             AccountServiceException.class,
-            () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN));
+            () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN, ACTOR_ID));
 
     assertSame(compensationException, thrown);
 
@@ -487,10 +512,12 @@ class TransferServiceTest {
 
   @Test
   void shouldRejectSameIdempotencyKeyWithDifferentTransferData() {
+    prepareDestinationAccountLookup();
+
     CreateTransferRequest request =
         new CreateTransferRequest(
             SOURCE_ACCOUNT_ID,
-            DESTINATION_ACCOUNT_ID,
+            DESTINATION_IBAN,
             new BigDecimal("500.0000"),
             "EUR",
             IDEMPOTENCY_KEY);
@@ -502,7 +529,7 @@ class TransferServiceTest {
 
     assertThrows(
         IdempotencyConflictException.class,
-        () -> transferService.createTransfer(request, ACCESS_TOKEN));
+        () -> transferService.createTransfer(request, ACCESS_TOKEN, ACTOR_ID));
 
     verify(transferRepository, never()).save(any(Transfer.class));
 
@@ -524,9 +551,11 @@ class TransferServiceTest {
     AccountServiceException thrown =
         assertThrows(
             AccountServiceException.class,
-            () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN));
+            () -> transferService.createTransfer(createRequest(), ACCESS_TOKEN, ACTOR_ID));
 
     assertSame(exception, thrown);
+
+    verify(accountClient, never()).getAccountByIban(any());
 
     verify(transferRepository, never()).findByIdempotencyKey(any());
 
@@ -535,6 +564,14 @@ class TransferServiceTest {
     verify(accountClient, never()).debit(any(), any(), any());
 
     verify(accountClient, never()).credit(any(), any(), any());
+  }
+
+  private void prepareDestinationAccountLookup() {
+    AccountResponse destinationAccount = mock(AccountResponse.class);
+
+    when(destinationAccount.id()).thenReturn(DESTINATION_ACCOUNT_ID);
+
+    when(accountClient.getAccountByIban(DESTINATION_IBAN)).thenReturn(destinationAccount);
   }
 
   private void prepareNewTransferPersistence() {
@@ -564,7 +601,7 @@ class TransferServiceTest {
 
   private CreateTransferRequest createRequest() {
     return new CreateTransferRequest(
-        SOURCE_ACCOUNT_ID, DESTINATION_ACCOUNT_ID, AMOUNT, "EUR", IDEMPOTENCY_KEY);
+        SOURCE_ACCOUNT_ID, DESTINATION_IBAN, AMOUNT, "EUR", IDEMPOTENCY_KEY);
   }
 
   private Transfer createTransfer() {

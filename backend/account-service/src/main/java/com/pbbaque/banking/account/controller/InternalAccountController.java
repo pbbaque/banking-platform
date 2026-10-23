@@ -45,6 +45,18 @@ public class InternalAccountController {
   }
 
   /**
+   * Retrieves an account by IBAN for an internal service.
+   *
+   * @param iban account IBAN
+   * @return matching account
+   */
+  @GetMapping("/iban/{iban}")
+  public ResponseEntity<AccountResponse> getByIban(@PathVariable String iban) {
+
+    return ResponseEntity.ok(AccountResponse.from(accountService.getByIban(iban)));
+  }
+
+  /**
    * Retrieves a completed account operation.
    *
    * @param operationId operation identifier

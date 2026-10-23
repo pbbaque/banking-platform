@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pbbaque.banking.transfer.config.SecurityConfig;
 import com.pbbaque.banking.transfer.domain.Transfer;
 import com.pbbaque.banking.transfer.dto.CreateTransferRequest;
+import com.pbbaque.banking.transfer.dto.TransferDetailResponse;
 import com.pbbaque.banking.transfer.exception.TransferNotFoundException;
 import com.pbbaque.banking.transfer.service.TransferService;
 import java.math.BigDecimal;
@@ -39,6 +40,10 @@ class TransferControllerTest {
   private static final UUID DESTINATION_ACCOUNT_ID =
       UUID.fromString("22222222-2222-2222-2222-222222222222");
 
+  private static final String SOURCE_IBAN = "ES7620770024003102575766";
+
+  private static final String DESTINATION_IBAN = "ES6421000418450200051333";
+
   private static final UUID TRANSFER_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
 
   private static final UUID IDENTITY_USER_ID =
@@ -61,7 +66,7 @@ class TransferControllerTest {
     CreateTransferRequest request =
         new CreateTransferRequest(
             SOURCE_ACCOUNT_ID,
-            DESTINATION_ACCOUNT_ID,
+            DESTINATION_IBAN,
             new BigDecimal("100.0000"),
             "EUR",
             IDEMPOTENCY_KEY);
@@ -76,7 +81,8 @@ class TransferControllerTest {
 
     transfer.complete();
 
-    when(transferService.createTransfer(any(CreateTransferRequest.class), eq(ACCESS_TOKEN)))
+    when(transferService.createTransfer(
+            any(CreateTransferRequest.class), eq(ACCESS_TOKEN), eq(IDENTITY_USER_ID)))
         .thenReturn(transfer);
 
     mockMvc
@@ -96,6 +102,7 @@ class TransferControllerTest {
 
   @Test
   void shouldReturnTransferById() throws Exception {
+
     Transfer transfer =
         Transfer.create(
             SOURCE_ACCOUNT_ID,
@@ -104,18 +111,28 @@ class TransferControllerTest {
             "EUR",
             IDEMPOTENCY_KEY);
 
-    when(transferService.getById(TRANSFER_ID, ACCESS_TOKEN)).thenReturn(transfer);
+    TransferDetailResponse response =
+        TransferDetailResponse.from(
+            transfer, SOURCE_IBAN, DESTINATION_IBAN, new BigDecimal("650.0000"));
+
+    when(transferService.getDetailById(TRANSFER_ID, ACCESS_TOKEN)).thenReturn(response);
 
     mockMvc
         .perform(get("/api/transfers/{id}", TRANSFER_ID).with(userJwt()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.sourceAccountId").value(SOURCE_ACCOUNT_ID.toString()))
+        .andExpect(jsonPath("$.sourceIban").value(SOURCE_IBAN))
         .andExpect(jsonPath("$.destinationAccountId").value(DESTINATION_ACCOUNT_ID.toString()))
-        .andExpect(jsonPath("$.status").value("PENDING"));
+        .andExpect(jsonPath("$.destinationIban").value(DESTINATION_IBAN))
+        .andExpect(jsonPath("$.amount").value(50.0000))
+        .andExpect(jsonPath("$.currency").value("EUR"))
+        .andExpect(jsonPath("$.status").value("PENDING"))
+        .andExpect(jsonPath("$.balanceAfter").value(650.0000));
   }
 
   @Test
   void shouldReturnTransferByIdempotencyKey() throws Exception {
+
     Transfer transfer =
         Transfer.create(
             SOURCE_ACCOUNT_ID,
@@ -136,7 +153,8 @@ class TransferControllerTest {
 
   @Test
   void shouldReturnNotFoundWhenTransferDoesNotExist() throws Exception {
-    when(transferService.getById(TRANSFER_ID, ACCESS_TOKEN))
+
+    when(transferService.getDetailById(TRANSFER_ID, ACCESS_TOKEN))
         .thenThrow(new TransferNotFoundException(TRANSFER_ID));
 
     mockMvc
@@ -149,9 +167,9 @@ class TransferControllerTest {
 
   @Test
   void shouldRejectInvalidTransferRequest() throws Exception {
+
     CreateTransferRequest request =
-        new CreateTransferRequest(
-            SOURCE_ACCOUNT_ID, DESTINATION_ACCOUNT_ID, BigDecimal.ZERO, "", "");
+        new CreateTransferRequest(SOURCE_ACCOUNT_ID, "", BigDecimal.ZERO, "", "");
 
     mockMvc
         .perform(
@@ -166,6 +184,7 @@ class TransferControllerTest {
 
   @Test
   void shouldRejectInvalidTransferId() throws Exception {
+
     mockMvc
         .perform(get("/api/transfers/not-a-uuid").with(userJwt()))
         .andExpect(status().isBadRequest())
@@ -175,6 +194,7 @@ class TransferControllerTest {
 
   @Test
   void shouldRejectTransferEndpointWithoutJwt() throws Exception {
+
     mockMvc.perform(get("/api/transfers/{id}", TRANSFER_ID)).andExpect(status().isUnauthorized());
   }
 

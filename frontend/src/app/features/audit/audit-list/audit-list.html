@@ -1,1 +1,391 @@
-<p>audit-list works!</p>
+<section class="audit-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Seguridad y actividad</p>
+
+      <h1>Actividad</h1>
+
+      <p class="page-description">Consulta las operaciones relevantes registradas en tu cuenta.</p>
+    </div>
+
+    @if (!loading() && !error()) {
+      <button type="button" class="refresh-button" (click)="loadEvents()">
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+        >
+          <path d="M20 11a8 8 0 1 0-2.3 5.7"></path>
+          <path d="M20 5v6h-6"></path>
+        </svg>
+
+        Actualizar
+      </button>
+    }
+  </header>
+
+  @if (loading()) {
+    <div class="loading-state" aria-label="Cargando actividad">
+      <div class="skeleton skeleton-summary"></div>
+
+      <div class="skeleton skeleton-event"></div>
+
+      <div class="skeleton skeleton-event"></div>
+
+      <div class="skeleton skeleton-event"></div>
+    </div>
+  } @else if (error()) {
+    <div class="error-state">
+      <div class="state-icon error-icon">
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+        >
+          <circle cx="12" cy="12" r="9"></circle>
+
+          <path d="M12 7v6"></path>
+          <path d="M12 17h.01"></path>
+        </svg>
+      </div>
+
+      <h2>No hemos podido cargar tu actividad</h2>
+
+      <p>{{ error() }}</p>
+
+      <button type="button" class="secondary-button" (click)="loadEvents()">Reintentar</button>
+    </div>
+  } @else {
+    <section class="activity-summary">
+      <div class="summary-item">
+        <div class="summary-icon summary-all">
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+          >
+            <path d="M5 6h14"></path>
+            <path d="M5 12h14"></path>
+            <path d="M5 18h14"></path>
+          </svg>
+        </div>
+
+        <div>
+          <span>Total</span>
+
+          <strong>
+            {{ events().length }}
+          </strong>
+        </div>
+      </div>
+
+      <div class="summary-item">
+        <div class="summary-icon summary-success">
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+          >
+            <circle cx="12" cy="12" r="9"></circle>
+
+            <path d="m8 12 2.5 2.5L16 9"></path>
+          </svg>
+        </div>
+
+        <div>
+          <span>Correctas</span>
+
+          <strong>
+            {{ successCount() }}
+          </strong>
+        </div>
+      </div>
+
+      <div class="summary-item">
+        <div class="summary-icon summary-failure">
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+          >
+            <circle cx="12" cy="12" r="9"></circle>
+
+            <path d="m9 9 6 6"></path>
+            <path d="m15 9-6 6"></path>
+          </svg>
+        </div>
+
+        <div>
+          <span>Fallidas</span>
+
+          <strong>
+            {{ failureCount() }}
+          </strong>
+        </div>
+      </div>
+    </section>
+
+    <div class="filter-bar">
+      <button
+        type="button"
+        class="filter-button"
+        [class.filter-active]="selectedFilter() === 'ALL'"
+        (click)="setFilter('ALL')"
+      >
+        Todas
+
+        <span>
+          {{ events().length }}
+        </span>
+      </button>
+
+      <button
+        type="button"
+        class="filter-button"
+        [class.filter-active]="selectedFilter() === 'SUCCESS'"
+        (click)="setFilter('SUCCESS')"
+      >
+        Correctas
+
+        <span>
+          {{ successCount() }}
+        </span>
+      </button>
+
+      <button
+        type="button"
+        class="filter-button"
+        [class.filter-active]="selectedFilter() === 'FAILURE'"
+        (click)="setFilter('FAILURE')"
+      >
+        Fallidas
+
+        <span>
+          {{ failureCount() }}
+        </span>
+      </button>
+    </div>
+
+    @if (filteredEvents().length === 0) {
+      <div class="empty-state">
+        <div class="state-icon empty-icon">
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+          >
+            <path d="M5 6h14"></path>
+            <path d="M5 12h10"></path>
+            <path d="M5 18h7"></path>
+          </svg>
+        </div>
+
+        @if (events().length === 0) {
+          <h2>Aún no hay actividad</h2>
+
+          <p>Cuando realices operaciones relevantes aparecerán aquí.</p>
+        } @else {
+          <h2>No hay resultados</h2>
+
+          <p>No existen eventos que coincidan con el filtro seleccionado.</p>
+        }
+      </div>
+    } @else {
+      <section class="activity-card">
+        <div class="activity-list">
+          @for (event of filteredEvents(); track event.id) {
+            <article
+              class="activity-event"
+              [class.event-failed]="event.eventType === 'TRANSFER_FAILED'"
+            >
+              <div class="timeline-column">
+                <div
+                  class="event-icon"
+                  [class.event-icon-success]="outcomeLabel(event) === 'Correcta'"
+                  [class.event-icon-failure]="outcomeLabel(event) === 'Fallida'"
+                >
+                  @if (outcomeLabel(event) === 'Correcta') {
+                    <svg
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.9"
+                    >
+                      <path d="M7 17 17 7"></path>
+                      <path d="M8 7h9v9"></path>
+                    </svg>
+                  } @else {
+                    <svg
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.9"
+                    >
+                      <circle cx="12" cy="12" r="9"></circle>
+                      <path d="m9 9 6 6"></path>
+                      <path d="m15 9-6 6"></path>
+                    </svg>
+                  }
+                </div>
+
+                <div class="timeline-line"></div>
+              </div>
+
+              <div class="event-content">
+                <div class="event-header">
+                  <div>
+                    <div class="event-title-row">
+                      <h2>
+                        {{ eventTitle(event) }}
+                      </h2>
+
+                      <span
+                        class="outcome-badge"
+                        [class.outcome-success]="outcomeLabel(event) === 'Correcta'"
+                        [class.outcome-failure]="outcomeLabel(event) === 'Fallida'"
+                      >
+                        {{ outcomeLabel(event) }}
+                      </span>
+                    </div>
+
+                    <p>
+                      {{ eventDescription(event) }}
+                    </p>
+                  </div>
+
+                  <time [attr.datetime]="event.occurredAt">
+                    {{ event.occurredAt | date: 'dd/MM/yyyy · HH:mm' }}
+                  </time>
+                </div>
+
+                <div class="event-meta">
+                  <span>
+                    {{ aggregateLabel(event.aggregateType) }}
+                  </span>
+
+                  <span class="meta-separator"> · </span>
+
+                  <code>
+                    {{ event.aggregateId }}
+                  </code>
+                </div>
+
+                <div class="event-actions">
+                  @if (transferRoute(event); as route) {
+                    <a [routerLink]="route" class="event-link">
+                      Ver transferencia
+
+                      <svg
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                      >
+                        <path d="M5 12h14"></path>
+                        <path d="m15 8 4 4-4 4"></path>
+                      </svg>
+                    </a>
+                  }
+
+                  <button type="button" class="details-button" (click)="toggleDetails(event.id)">
+                    {{ isExpanded(event.id) ? 'Ocultar detalles' : 'Más detalles' }}
+
+                    <svg
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      [class.chevron-open]="isExpanded(event.id)"
+                    >
+                      <path d="m7 10 5 5 5-5"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                @if (isExpanded(event.id)) {
+                  <div class="event-details">
+                    <div class="detail-row">
+                      <span> Tipo de evento </span>
+
+                      <code>
+                        {{ event.eventType }}
+                      </code>
+                    </div>
+
+                    <div class="detail-row">
+                      <span> ID del evento </span>
+
+                      <code>
+                        {{ event.id }}
+                      </code>
+                    </div>
+
+                    <div class="detail-row">
+                      <span> Tipo de agregado </span>
+
+                      <strong>
+                        {{ event.aggregateType }}
+                      </strong>
+                    </div>
+
+                    <div class="detail-row">
+                      <span> ID del agregado </span>
+
+                      <code>
+                        {{ event.aggregateId }}
+                      </code>
+                    </div>
+
+                    <div class="detail-row">
+                      <span> Registrado </span>
+
+                      <strong>
+                        {{ event.createdAt | date: 'dd/MM/yyyy · HH:mm:ss' }}
+                      </strong>
+                    </div>
+
+                    @if (hasMetadata(event)) {
+                      <div class="metadata-section">
+                        <h3>Información adicional</h3>
+
+                        <div class="metadata-list">
+                          @for (item of metadataEntries(event); track item.key) {
+                            <div class="metadata-row">
+                              <span>
+                                {{ item.key }}
+                              </span>
+
+                              <strong>
+                                {{ item.value }}
+                              </strong>
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            </article>
+          }
+        </div>
+      </section>
+    }
+  }
+</section>

@@ -2,6 +2,14 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
+export interface CreateTransferRequest {
+    sourceAccountId: string;
+    destinationIban: string;
+    amount: number;
+    currency: string;
+    idempotencyKey: string;
+}
+
 export interface TransferResponse {
     id: string;
     sourceAccountId: string;
@@ -17,14 +25,33 @@ export interface TransferResponse {
     completedAt: string | null;
 }
 
+export interface TransferDetailResponse extends TransferResponse {
+    sourceIban: string;
+    destinationIban: string;
+}
+
 @Injectable({
     providedIn: 'root',
 })
 export class TransferService {
     private readonly http = inject(HttpClient);
 
-    getByAccountId(accountId: string): Observable<TransferResponse[]> {
-        const params = new HttpParams().set('accountId', accountId);
+    create(
+        request: CreateTransferRequest,
+    ): Observable<TransferResponse> {
+        return this.http.post<TransferResponse>(
+            '/transfer-api/api/transfers',
+            request,
+        );
+    }
+
+    getByAccountId(
+        accountId: string,
+    ): Observable<TransferResponse[]> {
+        const params = new HttpParams().set(
+            'accountId',
+            accountId,
+        );
 
         return this.http.get<TransferResponse[]>(
             '/transfer-api/api/transfers',
@@ -32,8 +59,10 @@ export class TransferService {
         );
     }
 
-    getById(transferId: string): Observable<TransferResponse> {
-        return this.http.get<TransferResponse>(
+    getById(
+        transferId: string,
+    ): Observable<TransferDetailResponse> {
+        return this.http.get<TransferDetailResponse>(
             `/transfer-api/api/transfers/${transferId}`,
         );
     }

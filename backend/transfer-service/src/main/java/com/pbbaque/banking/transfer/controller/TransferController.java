@@ -2,6 +2,7 @@ package com.pbbaque.banking.transfer.controller;
 
 import com.pbbaque.banking.transfer.domain.Transfer;
 import com.pbbaque.banking.transfer.dto.CreateTransferRequest;
+import com.pbbaque.banking.transfer.dto.TransferDetailResponse;
 import com.pbbaque.banking.transfer.dto.TransferResponse;
 import com.pbbaque.banking.transfer.service.TransferService;
 import jakarta.validation.Valid;
@@ -33,7 +34,6 @@ public class TransferController {
    * @param transferService transfer application service
    */
   public TransferController(TransferService transferService) {
-
     this.transferService = transferService;
   }
 
@@ -48,7 +48,9 @@ public class TransferController {
   public ResponseEntity<TransferResponse> createTransfer(
       @Valid @RequestBody CreateTransferRequest request, @AuthenticationPrincipal Jwt jwt) {
 
-    Transfer transfer = transferService.createTransfer(request, jwt.getTokenValue());
+    UUID actorId = UUID.fromString(jwt.getSubject());
+
+    Transfer transfer = transferService.createTransfer(request, jwt.getTokenValue(), actorId);
 
     BigDecimal balanceAfter =
         transferService.getBalanceAfter(transfer, transfer.getSourceAccountId());
@@ -58,21 +60,17 @@ public class TransferController {
   }
 
   /**
-   * Returns a transfer by its identifier.
+   * Returns a transfer detail by its identifier.
    *
    * @param id transfer identifier
    * @param jwt authenticated user's JWT
-   * @return transfer response
+   * @return detailed transfer response
    */
   @GetMapping("/{id}")
-  public ResponseEntity<TransferResponse> getById(
+  public ResponseEntity<TransferDetailResponse> getById(
       @PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
 
-    Transfer transfer = transferService.getById(id, jwt.getTokenValue());
-
-    BigDecimal balanceAfter = transferService.getBalanceAfterForUser(transfer, jwt.getTokenValue());
-
-    return ResponseEntity.ok(TransferResponse.from(transfer, balanceAfter));
+    return ResponseEntity.ok(transferService.getDetailById(id, jwt.getTokenValue()));
   }
 
   /**

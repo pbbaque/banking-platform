@@ -22,15 +22,6 @@ export interface AccountResponse {
 export class AccountService {
     private readonly http = inject(HttpClient);
 
-    getByCustomerId(customerId: string): Observable<AccountResponse[]> {
-        const params = new HttpParams().set('customerId', customerId);
-
-        return this.http.get<AccountResponse[]>(
-            '/account-api/api/accounts',
-            { params },
-        );
-    }
-
     getById(accountId: string): Observable<AccountResponse> {
         return this.http.get<AccountResponse>(
             `/account-api/api/accounts/${accountId}`,
@@ -40,6 +31,20 @@ export class AccountService {
     getByIban(iban: string): Observable<AccountResponse> {
         return this.http.get<AccountResponse>(
             `/account-api/api/accounts/iban/${encodeURIComponent(iban)}`,
+        );
+    }
+
+    getByCustomerId(
+        customerId: string,
+    ): Observable<AccountResponse[]> {
+        const params = new HttpParams().set(
+            'customerId',
+            customerId,
+        );
+
+        return this.http.get<AccountResponse[]>(
+            '/account-api/api/accounts',
+            { params },
         );
     }
 }

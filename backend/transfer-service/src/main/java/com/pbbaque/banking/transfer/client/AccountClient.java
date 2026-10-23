@@ -64,6 +64,31 @@ public class AccountClient {
   }
 
   /**
+   * Retrieves an account by IBAN through the internal service API.
+   *
+   * @param iban account IBAN
+   * @return account information
+   * @throws AccountServiceException when account-service rejects the request or cannot be reached
+   */
+  public AccountResponse getAccountByIban(String iban) {
+    try {
+      return restClient
+          .get()
+          .uri("/api/internal/accounts/iban/{iban}", iban)
+          .header(INTERNAL_SERVICE_HEADER, internalServiceToken)
+          .retrieve()
+          .body(AccountResponse.class);
+
+    } catch (RestClientResponseException exception) {
+      throw new AccountServiceException(
+          "Account service rejected account IBAN lookup", exception.getStatusCode(), exception);
+
+    } catch (RestClientException exception) {
+      throw new AccountServiceException("Unable to communicate with account service", exception);
+    }
+  }
+
+  /**
    * Retrieves an account using the authenticated user's JWT.
    *
    * <p>Account-service performs the actual account ownership validation.

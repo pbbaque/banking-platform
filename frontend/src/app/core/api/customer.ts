@@ -20,6 +20,14 @@ export interface CustomerResponse {
     updatedAt: string;
 }
 
+export interface UpdateCustomerContactRequest {
+    phoneNumber: string;
+    fiscalAddress: string;
+    postalCode: string;
+    city: string;
+    countryCode: string;
+}
+
 @Injectable({
     providedIn: 'root',
 })
@@ -35,6 +43,16 @@ export class CustomerService {
     getById(customerId: string): Observable<CustomerResponse> {
         return this.http.get<CustomerResponse>(
             `/customer-api/api/v1/customers/${customerId}`,
+        );
+    }
+
+    updateContactData(
+        customerId: string,
+        request: UpdateCustomerContactRequest,
+    ): Observable<CustomerResponse> {
+        return this.http.put<CustomerResponse>(
+            `/customer-api/api/v1/customers/${customerId}/contact`,
+            request,
         );
     }
 }
