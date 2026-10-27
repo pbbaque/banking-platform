@@ -29,4 +29,4 @@ management:
 security:
   jwt:
     public-key: classpath:keys/public.pem
-    private-key: ${JWT_PRIVATE_KEY_PATH:file:./local-keys/private.pem}
+    private-key: ${JWT_PRIVATE_KEY_PATH}
