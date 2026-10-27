@@ -1,0 +1,217 @@
+services:
+  oracle:
+    image: container-registry.oracle.com/database/free:latest
+    container_name: banking-oracle-demo
+    restart: unless-stopped
+
+    environment:
+      ORACLE_PWD: ${ORACLE_PASSWORD}
+      BANK_IDENTITY_PASSWORD: ${BANK_IDENTITY_PASSWORD}
+      BANK_CUSTOMER_PASSWORD: ${BANK_CUSTOMER_PASSWORD}
+      BANK_ACCOUNT_PASSWORD: ${BANK_ACCOUNT_PASSWORD}
+      BANK_TRANSFER_PASSWORD: ${BANK_TRANSFER_PASSWORD}
+      BANK_AUDIT_PASSWORD: ${BANK_AUDIT_PASSWORD}
+
+    volumes:
+      - banking-oracle-demo-data:/opt/oracle/oradata
+      - ./infrastructure/oracle/init:/opt/oracle/scripts/startup:ro
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "echo 'SELECT 1 FROM DUAL;' | sqlplus -s system/$$ORACLE_PWD@localhost:1521/FREEPDB1 || exit 1"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+    networks:
+      - banking-demo-network
+
+  kafka:
+    image: apache/kafka:4.1.0
+    container_name: banking-kafka-demo
+    restart: unless-stopped
+
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+
+    volumes:
+      - banking-kafka-demo-data:/var/lib/kafka/data
+
+    networks:
+      - banking-demo-network
+
+  identity-service:
+    build:
+      context: ./backend/identity-service
+
+    container_name: banking-identity-demo
+    restart: unless-stopped
+
+    environment:
+      IDENTITY_DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+      IDENTITY_DB_USERNAME: BANK_IDENTITY
+      IDENTITY_DB_PASSWORD: ${BANK_IDENTITY_PASSWORD}
+      JWT_PRIVATE_KEY_PATH: file:/run/secrets/jwt-private.pem
+
+    volumes:
+      - ./backend/identity-service/local-keys/private.pem:/run/secrets/jwt-private.pem:ro
+
+    depends_on:
+      oracle:
+        condition: service_healthy
+
+    networks:
+      - banking-demo-network
+
+  customer-service:
+    build:
+      context: ./backend/customer-service
+
+    container_name: banking-customer-demo
+    restart: unless-stopped
+
+    environment:
+      CUSTOMER_DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+      CUSTOMER_DB_USERNAME: BANK_CUSTOMER
+      CUSTOMER_DB_PASSWORD: ${BANK_CUSTOMER_PASSWORD}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+
+    depends_on:
+      oracle:
+        condition: service_healthy
+
+    networks:
+      - banking-demo-network
+
+  account-service:
+    build:
+      context: ./backend/account-service
+
+    container_name: banking-account-demo
+    restart: unless-stopped
+
+    environment:
+      ACCOUNT_DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+      ACCOUNT_DB_USERNAME: BANK_ACCOUNT
+      ACCOUNT_DB_PASSWORD: ${BANK_ACCOUNT_PASSWORD}
+
+      CUSTOMER_SERVICE_URL: http://customer-service:8081
+      CUSTOMER_SERVICE_CONNECT_TIMEOUT: 2s
+      CUSTOMER_SERVICE_READ_TIMEOUT: 5s
+
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+
+    depends_on:
+      oracle:
+        condition: service_healthy
+      customer-service:
+        condition: service_started
+
+    networks:
+      - banking-demo-network
+
+  transfer-service:
+    build:
+      context: ./backend/transfer-service
+
+    container_name: banking-transfer-demo
+    restart: unless-stopped
+
+    environment:
+      TRANSFER_DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+      TRANSFER_DB_USERNAME: BANK_TRANSFER
+      TRANSFER_DB_PASSWORD: ${BANK_TRANSFER_PASSWORD}
+
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+      ACCOUNT_SERVICE_URL: http://account-service:8083
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+
+      AUDIT_EVENTS_TOPIC: banking.audit-events
+
+    depends_on:
+      oracle:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      account-service:
+        condition: service_started
+
+    networks:
+      - banking-demo-network
+
+  audit-service:
+    build:
+      context: ./backend/audit-service
+
+    container_name: banking-audit-demo
+    restart: unless-stopped
+
+    environment:
+      AUDIT_DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+      AUDIT_DB_USERNAME: BANK_AUDIT
+      AUDIT_DB_PASSWORD: ${BANK_AUDIT_PASSWORD}
+
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      AUDIT_KAFKA_GROUP_ID: audit-service
+      AUDIT_EVENTS_TOPIC: banking.audit-events
+
+    depends_on:
+      oracle:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+    networks:
+      - banking-demo-network
+
+  frontend:
+    build:
+      context: ./frontend
+
+    container_name: banking-frontend-demo
+    restart: unless-stopped
+
+    ports:
+      - "8088:80"
+
+    depends_on:
+      identity-service:
+        condition: service_started
+      customer-service:
+        condition: service_started
+      account-service:
+        condition: service_started
+      transfer-service:
+        condition: service_started
+      audit-service:
+        condition: service_started
+
+    networks:
+      - banking-demo-network
+
+volumes:
+  banking-oracle-demo-data:
+  banking-kafka-demo-data:
+
+networks:
+  banking-demo-network:
+    driver: bridge
