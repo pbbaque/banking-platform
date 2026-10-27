@@ -31,13 +31,15 @@ class AuditEventRepositoryIT {
   }
 
   @Test
-  void shouldSaveAndFindAuditEventById() {
+  void shouldSaveAndFindAuditEventByIdAndActor() {
+    UUID actorId = UUID.randomUUID();
+
     AuditEvent auditEvent =
         AuditEvent.create(
             "TRANSFER_COMPLETED",
             "TRANSFER",
             UUID.randomUUID().toString(),
-            UUID.randomUUID(),
+            actorId,
             AuditOutcome.SUCCESS,
             "Transfer completed successfully",
             "{\"amount\":100}",
@@ -45,18 +47,50 @@ class AuditEventRepositoryIT {
 
     AuditEvent saved = auditEventRepository.saveAndFlush(auditEvent);
 
-    assertTrue(auditEventRepository.findById(saved.getId()).isPresent());
+    assertTrue(auditEventRepository.findByIdAndActorId(saved.getId(), actorId).isPresent());
 
-    AuditEvent found = auditEventRepository.findById(saved.getId()).orElseThrow();
+    AuditEvent found =
+        auditEventRepository.findByIdAndActorId(saved.getId(), actorId).orElseThrow();
 
     assertEquals(saved.getId(), found.getId());
+
+    assertEquals(actorId, found.getActorId());
+
     assertEquals("TRANSFER_COMPLETED", found.getEventType());
+
     assertEquals("TRANSFER", found.getAggregateType());
+
     assertEquals(AuditOutcome.SUCCESS, found.getOutcome());
   }
 
   @Test
-  void shouldFindAuditEventsByAggregate() {
+  void shouldNotFindAuditEventByIdForDifferentActor() {
+    UUID ownerActorId = UUID.randomUUID();
+
+    UUID differentActorId = UUID.randomUUID();
+
+    AuditEvent auditEvent =
+        AuditEvent.create(
+            "TRANSFER_COMPLETED",
+            "TRANSFER",
+            UUID.randomUUID().toString(),
+            ownerActorId,
+            AuditOutcome.SUCCESS,
+            null,
+            null,
+            OffsetDateTime.now(ZoneOffset.UTC));
+
+    AuditEvent saved = auditEventRepository.saveAndFlush(auditEvent);
+
+    assertTrue(auditEventRepository.findByIdAndActorId(saved.getId(), differentActorId).isEmpty());
+  }
+
+  @Test
+  void shouldFindAuditEventsByAggregateAndActor() {
+    UUID actorId = UUID.randomUUID();
+
+    UUID differentActorId = UUID.randomUUID();
+
     String aggregateId = UUID.randomUUID().toString();
 
     AuditEvent first =
@@ -64,7 +98,7 @@ class AuditEventRepositoryIT {
             "TRANSFER_CREATED",
             "TRANSFER",
             aggregateId,
-            null,
+            actorId,
             AuditOutcome.SUCCESS,
             null,
             null,
@@ -75,24 +109,44 @@ class AuditEventRepositoryIT {
             "TRANSFER_COMPLETED",
             "TRANSFER",
             aggregateId,
-            null,
+            actorId,
             AuditOutcome.SUCCESS,
             null,
             null,
             OffsetDateTime.now(ZoneOffset.UTC));
 
-    auditEventRepository.saveAllAndFlush(List.of(first, second));
+    AuditEvent otherActorEvent =
+        AuditEvent.create(
+            "TRANSFER_COMPLETED",
+            "TRANSFER",
+            aggregateId,
+            differentActorId,
+            AuditOutcome.SUCCESS,
+            null,
+            null,
+            OffsetDateTime.now(ZoneOffset.UTC));
+
+    auditEventRepository.saveAllAndFlush(List.of(first, second, otherActorEvent));
 
     List<AuditEvent> results =
-        auditEventRepository.findAllByAggregateTypeAndAggregateId("TRANSFER", aggregateId);
+        auditEventRepository.findAllByAggregateTypeAndAggregateIdAndActorId(
+            "TRANSFER", aggregateId, actorId);
 
     assertEquals(2, results.size());
-    assertTrue(results.stream().allMatch(event -> aggregateId.equals(event.getAggregateId())));
+
+    assertTrue(
+        results.stream()
+            .allMatch(
+                event ->
+                    aggregateId.equals(event.getAggregateId())
+                        && actorId.equals(event.getActorId())));
   }
 
   @Test
   void shouldFindAuditEventsByActor() {
     UUID actorId = UUID.randomUUID();
+
+    UUID differentActorId = UUID.randomUUID();
 
     AuditEvent first =
         AuditEvent.create(
@@ -116,22 +170,38 @@ class AuditEventRepositoryIT {
             null,
             OffsetDateTime.now(ZoneOffset.UTC));
 
-    auditEventRepository.saveAllAndFlush(List.of(first, second));
+    AuditEvent otherActorEvent =
+        AuditEvent.create(
+            "TRANSFER_CREATED",
+            "TRANSFER",
+            UUID.randomUUID().toString(),
+            differentActorId,
+            AuditOutcome.SUCCESS,
+            null,
+            null,
+            OffsetDateTime.now(ZoneOffset.UTC));
+
+    auditEventRepository.saveAllAndFlush(List.of(first, second, otherActorEvent));
 
     List<AuditEvent> results = auditEventRepository.findAllByActorId(actorId);
 
     assertEquals(2, results.size());
+
     assertTrue(results.stream().allMatch(event -> actorId.equals(event.getActorId())));
   }
 
   @Test
-  void shouldFindAuditEventsByEventType() {
+  void shouldFindAuditEventsByEventTypeAndActor() {
+    UUID actorId = UUID.randomUUID();
+
+    UUID differentActorId = UUID.randomUUID();
+
     AuditEvent first =
         AuditEvent.create(
             "TRANSFER_FAILED",
             "TRANSFER",
             UUID.randomUUID().toString(),
-            null,
+            actorId,
             AuditOutcome.FAILURE,
             "Destination credit failed",
             null,
@@ -142,24 +212,45 @@ class AuditEventRepositoryIT {
             "TRANSFER_FAILED",
             "TRANSFER",
             UUID.randomUUID().toString(),
-            null,
+            actorId,
             AuditOutcome.FAILURE,
             "Insufficient funds",
             null,
             OffsetDateTime.now(ZoneOffset.UTC));
 
-    auditEventRepository.saveAllAndFlush(List.of(first, second));
+    AuditEvent otherActorEvent =
+        AuditEvent.create(
+            "TRANSFER_FAILED",
+            "TRANSFER",
+            UUID.randomUUID().toString(),
+            differentActorId,
+            AuditOutcome.FAILURE,
+            "Other actor transfer failed",
+            null,
+            OffsetDateTime.now(ZoneOffset.UTC));
 
-    List<AuditEvent> results = auditEventRepository.findAllByEventType("TRANSFER_FAILED");
+    auditEventRepository.saveAllAndFlush(List.of(first, second, otherActorEvent));
+
+    List<AuditEvent> results =
+        auditEventRepository.findAllByEventTypeAndActorId("TRANSFER_FAILED", actorId);
 
     assertEquals(2, results.size());
-    assertTrue(results.stream().allMatch(event -> "TRANSFER_FAILED".equals(event.getEventType())));
+
+    assertTrue(
+        results.stream()
+            .allMatch(
+                event ->
+                    "TRANSFER_FAILED".equals(event.getEventType())
+                        && actorId.equals(event.getActorId())));
   }
 
   @Test
-  void shouldReturnEmptyListWhenAggregateDoesNotExist() {
+  void shouldReturnEmptyListWhenAggregateDoesNotExistForActor() {
+    UUID actorId = UUID.randomUUID();
+
     List<AuditEvent> results =
-        auditEventRepository.findAllByAggregateTypeAndAggregateId("TRANSFER", "missing-transfer");
+        auditEventRepository.findAllByAggregateTypeAndAggregateIdAndActorId(
+            "TRANSFER", "missing-transfer", actorId);
 
     assertTrue(results.isEmpty());
   }
@@ -182,10 +273,15 @@ class AuditEventRepositoryIT {
     AuditEvent found = auditEventRepository.findById(saved.getId()).orElseThrow();
 
     assertEquals(saved.getId(), found.getId());
+
     assertEquals(AuditOutcome.SUCCESS, found.getOutcome());
+
     assertFalse(found.getOccurredAt() == null);
+
     assertTrue(found.getActorId() == null);
+
     assertTrue(found.getDescription() == null);
+
     assertTrue(found.getMetadata() == null);
   }
 }

@@ -1,259 +1,277 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-	<modelVersion>4.0.0</modelVersion>
+        <modelVersion>4.0.0</modelVersion>
 
-	<parent>
-		<groupId>org.springframework.boot</groupId>
-		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.5.16</version>
-		<relativePath/>
-	</parent>
+        <parent>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-parent</artifactId>
+                <version>3.5.16</version>
+                <relativePath/>
+        </parent>
 
-	<groupId>com.pbbaque.banking</groupId>
-	<artifactId>audit-service</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+        <groupId>com.pbbaque.banking</groupId>
+        <artifactId>audit-service</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
 
-	<name>audit-service</name>
-	<description>Audit service for the banking platform</description>
+        <name>audit-service</name>
+        <description>Audit service for the banking platform</description>
 
-	<properties>
-		<java.version>17</java.version>
+        <properties>
+                <java.version>17</java.version>
 
-		<maven-failsafe-plugin.version>3.5.6</maven-failsafe-plugin.version>
-		<jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
-		<spotbugs-maven-plugin.version>4.8.6.6</spotbugs-maven-plugin.version>
-		<maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
-		<spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
-	</properties>
+                <maven-failsafe-plugin.version>3.5.6</maven-failsafe-plugin.version>
+                <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
+                <spotbugs-maven-plugin.version>4.8.6.6</spotbugs-maven-plugin.version>
+                <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
+                <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
+        </properties>
 
-	<dependencies>
+        <dependencies>
 
-		<!-- Web API -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-web</artifactId>
-		</dependency>
+                <!-- Web API -->
+                <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-web</artifactId>
+                </dependency>
 
-		<!-- Persistence -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-jpa</artifactId>
-		</dependency>
+                <!-- Security -->
+                <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-security</artifactId>
+                </dependency>
 
-		<!-- Bean validation -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-validation</artifactId>
-		</dependency>
+                <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+                </dependency>
 
-		<!-- Health and operational endpoints -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-actuator</artifactId>
-		</dependency>
+                <!-- Persistence -->
+                <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-data-jpa</artifactId>
+                </dependency>
 
-		<!-- Kafka -->
-		<dependency>
-			<groupId>org.springframework.kafka</groupId>
-			<artifactId>spring-kafka</artifactId>
-		</dependency>
+                <!-- Bean validation -->
+                <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-validation</artifactId>
+                </dependency>
 
-		<!-- Database migrations -->
-		<dependency>
-			<groupId>org.flywaydb</groupId>
-			<artifactId>flyway-core</artifactId>
-		</dependency>
+                <!-- Health and operational endpoints -->
+                <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-actuator</artifactId>
+                </dependency>
 
-		<dependency>
-			<groupId>org.flywaydb</groupId>
-			<artifactId>flyway-database-oracle</artifactId>
-		</dependency>
+                <!-- Kafka -->
+                <dependency>
+                        <groupId>org.springframework.kafka</groupId>
+                        <artifactId>spring-kafka</artifactId>
+                </dependency>
 
-		<!-- Oracle JDBC driver -->
-		<dependency>
-			<groupId>com.oracle.database.jdbc</groupId>
-			<artifactId>ojdbc17</artifactId>
-			<scope>runtime</scope>
-		</dependency>
+                <!-- Database migrations -->
+                <dependency>
+                        <groupId>org.flywaydb</groupId>
+                        <artifactId>flyway-core</artifactId>
+                </dependency>
 
-		<!-- Configuration metadata -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-configuration-processor</artifactId>
-			<optional>true</optional>
-		</dependency>
+                <dependency>
+                        <groupId>org.flywaydb</groupId>
+                        <artifactId>flyway-database-oracle</artifactId>
+                </dependency>
 
-		<!-- Tests -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-test</artifactId>
-			<scope>test</scope>
-		</dependency>
+                <!-- Oracle JDBC driver -->
+                <dependency>
+                        <groupId>com.oracle.database.jdbc</groupId>
+                        <artifactId>ojdbc17</artifactId>
+                        <scope>runtime</scope>
+                </dependency>
 
-	</dependencies>
+                <!-- Configuration metadata -->
+                <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-configuration-processor</artifactId>
+                        <optional>true</optional>
+                </dependency>
 
-	<build>
-		<plugins>
+                <!-- Tests -->
+                <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-test</artifactId>
+                        <scope>test</scope>
+                </dependency>
 
-			<!-- Spring Boot packaging -->
-			<plugin>
-				<groupId>org.springframework.boot</groupId>
-				<artifactId>spring-boot-maven-plugin</artifactId>
-			</plugin>
+                <dependency>
+                        <groupId>org.springframework.security</groupId>
+                        <artifactId>spring-security-test</artifactId>
+                        <scope>test</scope>
+                </dependency>
 
-			<!-- Integration tests (*IT.java) -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-failsafe-plugin</artifactId>
-				<version>${maven-failsafe-plugin.version}</version>
+        </dependencies>
 
-				<configuration>
-					<systemPropertyVariables>
-						<spring.profiles.active>local</spring.profiles.active>
-						<spring.kafka.listener.auto-startup>false</spring.kafka.listener.auto-startup>
-					</systemPropertyVariables>
-				</configuration>
+        <build>
+                <plugins>
 
-				<executions>
-					<execution>
-						<goals>
-							<goal>integration-test</goal>
-							<goal>verify</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
+                        <!-- Spring Boot packaging -->
+                        <plugin>
+                                <groupId>org.springframework.boot</groupId>
+                                <artifactId>spring-boot-maven-plugin</artifactId>
+                        </plugin>
 
-			<!-- Code coverage -->
-			<plugin>
-				<groupId>org.jacoco</groupId>
-				<artifactId>jacoco-maven-plugin</artifactId>
-				<version>${jacoco-maven-plugin.version}</version>
+                        <!-- Integration tests (*IT.java) -->
+                        <plugin>
+                                <groupId>org.apache.maven.plugins</groupId>
+                                <artifactId>maven-failsafe-plugin</artifactId>
+                                <version>${maven-failsafe-plugin.version}</version>
 
-				<executions>
-					<execution>
-						<id>prepare-agent</id>
-						<goals>
-							<goal>prepare-agent</goal>
-						</goals>
-					</execution>
+                                <configuration>
+                                        <systemPropertyVariables>
+                                                <spring.profiles.active>local</spring.profiles.active>
+                                                <spring.kafka.listener.auto-startup>false</spring.kafka.listener.auto-startup>
+                                        </systemPropertyVariables>
+                                </configuration>
 
-					<execution>
-						<id>report</id>
-						<phase>verify</phase>
-						<goals>
-							<goal>report</goal>
-						</goals>
-					</execution>
+                                <executions>
+                                        <execution>
+                                                <goals>
+                                                        <goal>integration-test</goal>
+                                                        <goal>verify</goal>
+                                                </goals>
+                                        </execution>
+                                </executions>
+                        </plugin>
 
-					<execution>
-						<id>check</id>
-						<phase>verify</phase>
-						<goals>
-							<goal>check</goal>
-						</goals>
+                        <!-- Code coverage -->
+                        <plugin>
+                                <groupId>org.jacoco</groupId>
+                                <artifactId>jacoco-maven-plugin</artifactId>
+                                <version>${jacoco-maven-plugin.version}</version>
 
-						<configuration>
-							<rules>
-								<rule>
-									<element>BUNDLE</element>
-									<limits>
-										<limit>
-											<counter>LINE</counter>
-											<value>COVEREDRATIO</value>
-											<minimum>0.70</minimum>
-										</limit>
-									</limits>
-								</rule>
-							</rules>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
+                                <executions>
+                                        <execution>
+                                                <id>prepare-agent</id>
+                                                <goals>
+                                                        <goal>prepare-agent</goal>
+                                                </goals>
+                                        </execution>
 
-			<!-- Static bug analysis -->
-			<plugin>
-				<groupId>com.github.spotbugs</groupId>
-				<artifactId>spotbugs-maven-plugin</artifactId>
-				<version>${spotbugs-maven-plugin.version}</version>
+                                        <execution>
+                                                <id>report</id>
+                                                <phase>verify</phase>
+                                                <goals>
+                                                        <goal>report</goal>
+                                                </goals>
+                                        </execution>
 
-				<configuration>
-					<effort>Max</effort>
-					<threshold>Medium</threshold>
-					<failOnError>true</failOnError>
-				</configuration>
+                                        <execution>
+                                                <id>check</id>
+                                                <phase>verify</phase>
+                                                <goals>
+                                                        <goal>check</goal>
+                                                </goals>
 
-				<executions>
-					<execution>
-						<id>spotbugs</id>
-						<phase>verify</phase>
-						<goals>
-							<goal>check</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
+                                                <configuration>
+                                                        <rules>
+                                                                <rule>
+                                                                        <element>BUNDLE</element>
+                                                                        <limits>
+                                                                                <limit>
+                                                                                        <counter>LINE</counter>
+                                                                                        <value>COVEREDRATIO</value>
+                                                                                        <minimum>0.70</minimum>
+                                                                                </limit>
+                                                                        </limits>
+                                                                </rule>
+                                                        </rules>
+                                                </configuration>
+                                        </execution>
+                                </executions>
+                        </plugin>
 
-			<!-- Java style checks -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-checkstyle-plugin</artifactId>
-				<version>${maven-checkstyle-plugin.version}</version>
+                        <!-- Static bug analysis -->
+                        <plugin>
+                                <groupId>com.github.spotbugs</groupId>
+                                <artifactId>spotbugs-maven-plugin</artifactId>
+                                <version>${spotbugs-maven-plugin.version}</version>
 
-				<configuration>
-					<configLocation>google_checks.xml</configLocation>
-					<consoleOutput>true</consoleOutput>
-					<failOnViolation>true</failOnViolation>
-					<violationSeverity>error</violationSeverity>
-				</configuration>
+                                <configuration>
+                                        <effort>Max</effort>
+                                        <threshold>Medium</threshold>
+                                        <failOnError>true</failOnError>
+                                </configuration>
 
-				<executions>
-					<execution>
-						<id>checkstyle</id>
-						<phase>verify</phase>
-						<goals>
-							<goal>check</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
+                                <executions>
+                                        <execution>
+                                                <id>spotbugs</id>
+                                                <phase>verify</phase>
+                                                <goals>
+                                                        <goal>check</goal>
+                                                </goals>
+                                        </execution>
+                                </executions>
+                        </plugin>
 
-			<!-- Automatic formatting -->
-			<plugin>
-				<groupId>com.diffplug.spotless</groupId>
-				<artifactId>spotless-maven-plugin</artifactId>
-				<version>${spotless-maven-plugin.version}</version>
+                        <!-- Java style checks -->
+                        <plugin>
+                                <groupId>org.apache.maven.plugins</groupId>
+                                <artifactId>maven-checkstyle-plugin</artifactId>
+                                <version>${maven-checkstyle-plugin.version}</version>
 
-				<configuration>
-					<java>
-						<googleJavaFormat/>
-					</java>
-				</configuration>
+                                <configuration>
+                                        <configLocation>google_checks.xml</configLocation>
+                                        <consoleOutput>true</consoleOutput>
+                                        <failOnViolation>true</failOnViolation>
+                                        <violationSeverity>error</violationSeverity>
+                                </configuration>
 
-				<executions>
-					<execution>
-						<id>spotless-check</id>
-						<phase>verify</phase>
-						<goals>
-							<goal>check</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
+                                <executions>
+                                        <execution>
+                                                <id>checkstyle</id>
+                                                <phase>verify</phase>
+                                                <goals>
+                                                        <goal>check</goal>
+                                                </goals>
+                                        </execution>
+                                </executions>
+                        </plugin>
 
-		</plugins>
-	</build>
+                        <!-- Automatic formatting -->
+                        <plugin>
+                                <groupId>com.diffplug.spotless</groupId>
+                                <artifactId>spotless-maven-plugin</artifactId>
+                                <version>${spotless-maven-plugin.version}</version>
 
-	<profiles>
-		<profile>
-			<id>local</id>
+                                <configuration>
+                                        <java>
+                                                <googleJavaFormat/>
+                                        </java>
+                                </configuration>
 
-			<properties>
-				<spring.profiles.active>local</spring.profiles.active>
-			</properties>
-		</profile>
-	</profiles>
+                                <executions>
+                                        <execution>
+                                                <id>spotless-check</id>
+                                                <phase>verify</phase>
+                                                <goals>
+                                                        <goal>check</goal>
+                                                </goals>
+                                        </execution>
+                                </executions>
+                        </plugin>
+
+                </plugins>
+        </build>
+
+        <profiles>
+                <profile>
+                        <id>local</id>
+
+                        <properties>
+                                <spring.profiles.active>local</spring.profiles.active>
+                        </properties>
+                </profile>
+        </profiles>
 
 </project>

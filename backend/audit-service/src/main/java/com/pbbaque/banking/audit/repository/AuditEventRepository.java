@@ -2,6 +2,7 @@ package com.pbbaque.banking.audit.repository;
 
 import com.pbbaque.banking.audit.domain.AuditEvent;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -9,13 +10,24 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface AuditEventRepository extends JpaRepository<AuditEvent, UUID> {
 
   /**
-   * Finds all audit events for a specific aggregate.
+   * Finds an audit event owned by a specific actor.
+   *
+   * @param id audit event identifier
+   * @param actorId actor identifier
+   * @return matching audit event when it exists
+   */
+  Optional<AuditEvent> findByIdAndActorId(UUID id, UUID actorId);
+
+  /**
+   * Finds audit events for an aggregate and actor.
    *
    * @param aggregateType aggregate type
    * @param aggregateId aggregate identifier
+   * @param actorId actor identifier
    * @return matching audit events
    */
-  List<AuditEvent> findAllByAggregateTypeAndAggregateId(String aggregateType, String aggregateId);
+  List<AuditEvent> findAllByAggregateTypeAndAggregateIdAndActorId(
+      String aggregateType, String aggregateId, UUID actorId);
 
   /**
    * Finds all audit events created by a specific actor.
@@ -26,10 +38,11 @@ public interface AuditEventRepository extends JpaRepository<AuditEvent, UUID> {
   List<AuditEvent> findAllByActorId(UUID actorId);
 
   /**
-   * Finds all audit events of a specific type.
+   * Finds audit events of a specific type for an actor.
    *
    * @param eventType event type
+   * @param actorId actor identifier
    * @return matching audit events
    */
-  List<AuditEvent> findAllByEventType(String eventType);
+  List<AuditEvent> findAllByEventTypeAndActorId(String eventType, UUID actorId);
 }

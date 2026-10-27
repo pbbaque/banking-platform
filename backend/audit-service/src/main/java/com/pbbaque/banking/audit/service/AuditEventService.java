@@ -27,18 +27,23 @@ public class AuditEventService {
    * @param objectMapper JSON serializer
    */
   public AuditEventService(AuditEventRepository auditEventRepository, ObjectMapper objectMapper) {
+
     this.auditEventRepository = auditEventRepository;
+
     this.objectMapper = objectMapper.copy();
   }
 
   /**
    * Creates and persists a new audit event.
    *
+   * <p>This method is not exposed through the public HTTP API.
+   *
    * @param request audit event creation request
    * @return persisted audit event
    */
   @Transactional
   public AuditEventResponse create(CreateAuditEventRequest request) {
+
     AuditEvent auditEvent =
         AuditEvent.create(
             request.eventType(),
@@ -66,6 +71,7 @@ public class AuditEventService {
    */
   @Transactional
   public boolean createFromMessage(AuditEventMessage message) {
+
     if (auditEventRepository.existsById(message.eventId())) {
       return false;
     }
@@ -88,31 +94,41 @@ public class AuditEventService {
   }
 
   /**
-   * Finds an audit event by identifier.
+   * Finds an audit event belonging to a specific actor.
+   *
+   * <p>An event owned by another actor is deliberately treated as not found so its existence is not
+   * disclosed.
    *
    * @param id audit event identifier
+   * @param actorId authenticated actor identifier
    * @return audit event
-   * @throws AuditEventNotFoundException if the audit event does not exist
+   * @throws AuditEventNotFoundException when no accessible event exists
    */
   @Transactional(readOnly = true)
-  public AuditEventResponse getById(UUID id) {
+  public AuditEventResponse getById(UUID id, UUID actorId) {
+
     AuditEvent auditEvent =
-        auditEventRepository.findById(id).orElseThrow(() -> new AuditEventNotFoundException(id));
+        auditEventRepository
+            .findByIdAndActorId(id, actorId)
+            .orElseThrow(() -> new AuditEventNotFoundException(id));
 
     return AuditEventResponse.from(auditEvent);
   }
 
   /**
-   * Finds audit events for a specific aggregate.
+   * Finds audit events for a specific aggregate and actor.
    *
    * @param aggregateType aggregate type
    * @param aggregateId aggregate identifier
-   * @return matching audit events
+   * @param actorId authenticated actor identifier
+   * @return matching accessible audit events
    */
   @Transactional(readOnly = true)
-  public List<AuditEventResponse> getByAggregate(String aggregateType, String aggregateId) {
+  public List<AuditEventResponse> getByAggregate(
+      String aggregateType, String aggregateId, UUID actorId) {
+
     return auditEventRepository
-        .findAllByAggregateTypeAndAggregateId(aggregateType, aggregateId)
+        .findAllByAggregateTypeAndAggregateIdAndActorId(aggregateType, aggregateId, actorId)
         .stream()
         .map(AuditEventResponse::from)
         .toList();
@@ -121,36 +137,41 @@ public class AuditEventService {
   /**
    * Finds audit events created by a specific actor.
    *
-   * @param actorId actor identifier
+   * @param actorId authenticated actor identifier
    * @return matching audit events
    */
   @Transactional(readOnly = true)
   public List<AuditEventResponse> getByActor(UUID actorId) {
+
     return auditEventRepository.findAllByActorId(actorId).stream()
         .map(AuditEventResponse::from)
         .toList();
   }
 
   /**
-   * Finds audit events of a specific event type.
+   * Finds audit events of a specific type belonging to an actor.
    *
    * @param eventType event type
-   * @return matching audit events
+   * @param actorId authenticated actor identifier
+   * @return matching accessible audit events
    */
   @Transactional(readOnly = true)
-  public List<AuditEventResponse> getByEventType(String eventType) {
-    return auditEventRepository.findAllByEventType(eventType).stream()
+  public List<AuditEventResponse> getByEventType(String eventType, UUID actorId) {
+
+    return auditEventRepository.findAllByEventTypeAndActorId(eventType, actorId).stream()
         .map(AuditEventResponse::from)
         .toList();
   }
 
   private String serializeMetadata(AuditEventMessage message) {
+
     if (message.metadata().isEmpty()) {
       return null;
     }
 
     try {
       return objectMapper.writeValueAsString(message.metadata());
+
     } catch (JsonProcessingException exception) {
       throw new IllegalStateException("Unable to serialize audit event metadata", exception);
     }

@@ -36,3 +36,7 @@ messaging:
     topics:
       audit-events:
         name: ${AUDIT_EVENTS_TOPIC:banking.audit-events}
+
+security:
+  jwt:
+    public-key: ${JWT_PUBLIC_KEY:classpath:keys/public.pem}

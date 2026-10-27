@@ -52,12 +52,12 @@ class AuditEventServiceTest {
   @BeforeEach
   void setUp() {
     objectMapper = new ObjectMapper().findAndRegisterModules();
+
     auditEventService = new AuditEventService(auditEventRepository, objectMapper);
   }
 
   @Test
   void shouldCreateAuditEvent() {
-    UUID actorId = UUID.randomUUID();
     OffsetDateTime occurredAt = OffsetDateTime.now(ZoneOffset.UTC);
 
     CreateAuditEventRequest request =
@@ -65,7 +65,7 @@ class AuditEventServiceTest {
             "TRANSFER_COMPLETED",
             "TRANSFER",
             "transfer-123",
-            actorId,
+            ACTOR_ID,
             AuditOutcome.SUCCESS,
             "Transfer completed successfully",
             "{\"amount\":100}",
@@ -83,27 +83,29 @@ class AuditEventServiceTest {
     AuditEvent savedAuditEvent = captor.getValue();
 
     assertEquals("TRANSFER_COMPLETED", savedAuditEvent.getEventType());
+
     assertEquals("TRANSFER", savedAuditEvent.getAggregateType());
+
     assertEquals("transfer-123", savedAuditEvent.getAggregateId());
-    assertEquals(actorId, savedAuditEvent.getActorId());
+
+    assertEquals(ACTOR_ID, savedAuditEvent.getActorId());
+
     assertEquals(AuditOutcome.SUCCESS, savedAuditEvent.getOutcome());
+
     assertEquals("Transfer completed successfully", savedAuditEvent.getDescription());
+
     assertEquals("{\"amount\":100}", savedAuditEvent.getMetadata());
+
     assertEquals(occurredAt, savedAuditEvent.getOccurredAt());
 
     assertEquals(savedAuditEvent.getId(), response.id());
-    assertEquals(savedAuditEvent.getEventType(), response.eventType());
-    assertEquals(savedAuditEvent.getAggregateType(), response.aggregateType());
-    assertEquals(savedAuditEvent.getAggregateId(), response.aggregateId());
+
     assertEquals(savedAuditEvent.getActorId(), response.actorId());
-    assertEquals(savedAuditEvent.getOutcome(), response.outcome());
-    assertEquals(savedAuditEvent.getDescription(), response.description());
-    assertEquals(savedAuditEvent.getMetadata(), response.metadata());
-    assertEquals(savedAuditEvent.getOccurredAt(), response.occurredAt());
   }
 
   @Test
   void shouldCreateAuditEventFromMessage() throws Exception {
+
     AuditEventMessage message = createMessage();
 
     when(auditEventRepository.existsById(EVENT_ID)).thenReturn(false);
@@ -118,18 +120,16 @@ class AuditEventServiceTest {
     verify(auditEventRepository).existsById(EVENT_ID);
 
     ArgumentCaptor<AuditEvent> captor = ArgumentCaptor.forClass(AuditEvent.class);
+
     verify(auditEventRepository).save(captor.capture());
 
     AuditEvent savedAuditEvent = captor.getValue();
 
     assertEquals(EVENT_ID, savedAuditEvent.getId());
-    assertEquals("TRANSFER_COMPLETED", savedAuditEvent.getEventType());
-    assertEquals("TRANSFER", savedAuditEvent.getAggregateType());
-    assertEquals("transfer-123", savedAuditEvent.getAggregateId());
+
     assertEquals(ACTOR_ID, savedAuditEvent.getActorId());
+
     assertEquals(AuditOutcome.SUCCESS, savedAuditEvent.getOutcome());
-    assertEquals("Transfer completed successfully", savedAuditEvent.getDescription());
-    assertEquals(OCCURRED_AT, savedAuditEvent.getOccurredAt());
 
     JsonNode metadata = objectMapper.readTree(savedAuditEvent.getMetadata());
 
@@ -139,8 +139,11 @@ class AuditEventServiceTest {
         "22222222-2222-2222-2222-222222222222", metadata.get("destinationAccountId").asText());
 
     assertEquals(0, new BigDecimal("25").compareTo(metadata.get("amount").decimalValue()));
+
     assertEquals("EUR", metadata.get("currency").asText());
+
     assertEquals("COMPLETED", metadata.get("status").asText());
+
     assertEquals("e2e-outbox-kafka-001", metadata.get("idempotencyKey").asText());
   }
 
@@ -155,6 +158,7 @@ class AuditEventServiceTest {
     assertFalse(created);
 
     verify(auditEventRepository).existsById(EVENT_ID);
+
     verify(auditEventRepository, never()).save(any(AuditEvent.class));
   }
 
@@ -166,7 +170,7 @@ class AuditEventServiceTest {
             "TRANSFER_FAILED",
             "TRANSFER",
             "transfer-123",
-            null,
+            ACTOR_ID,
             AuditOutcome.FAILURE,
             "Transfer failed",
             Map.of(),
@@ -182,165 +186,126 @@ class AuditEventServiceTest {
     assertTrue(created);
 
     ArgumentCaptor<AuditEvent> captor = ArgumentCaptor.forClass(AuditEvent.class);
+
     verify(auditEventRepository).save(captor.capture());
 
     assertEquals(EVENT_ID, captor.getValue().getId());
+
     assertEquals(AuditOutcome.FAILURE, captor.getValue().getOutcome());
+
     assertEquals(null, captor.getValue().getMetadata());
   }
 
   @Test
-  void shouldReturnAuditEventById() {
+  void shouldReturnAuditEventByIdAndActor() {
     AuditEvent auditEvent = createAuditEvent();
 
-    when(auditEventRepository.findById(auditEvent.getId())).thenReturn(Optional.of(auditEvent));
+    when(auditEventRepository.findByIdAndActorId(auditEvent.getId(), ACTOR_ID))
+        .thenReturn(Optional.of(auditEvent));
 
-    AuditEventResponse response = auditEventService.getById(auditEvent.getId());
+    AuditEventResponse response = auditEventService.getById(auditEvent.getId(), ACTOR_ID);
 
     assertEquals(auditEvent.getId(), response.id());
-    assertEquals(auditEvent.getEventType(), response.eventType());
-    assertEquals(auditEvent.getAggregateType(), response.aggregateType());
-    assertEquals(auditEvent.getAggregateId(), response.aggregateId());
 
-    verify(auditEventRepository).findById(auditEvent.getId());
+    assertEquals(ACTOR_ID, response.actorId());
+
+    verify(auditEventRepository).findByIdAndActorId(auditEvent.getId(), ACTOR_ID);
   }
 
   @Test
-  void shouldThrowWhenAuditEventDoesNotExist() {
+  void shouldHideAuditEventBelongingToAnotherActor() {
     UUID id = UUID.randomUUID();
 
-    when(auditEventRepository.findById(id)).thenReturn(Optional.empty());
+    when(auditEventRepository.findByIdAndActorId(id, ACTOR_ID)).thenReturn(Optional.empty());
 
     AuditEventNotFoundException exception =
-        assertThrows(AuditEventNotFoundException.class, () -> auditEventService.getById(id));
+        assertThrows(
+            AuditEventNotFoundException.class, () -> auditEventService.getById(id, ACTOR_ID));
 
     assertEquals("Audit event not found: " + id, exception.getMessage());
 
-    verify(auditEventRepository).findById(id);
+    verify(auditEventRepository).findByIdAndActorId(id, ACTOR_ID);
   }
 
   @Test
-  void shouldReturnAuditEventsByAggregate() {
-    AuditEvent first =
-        AuditEvent.create(
-            "TRANSFER_CREATED",
-            "TRANSFER",
-            "transfer-123",
-            null,
-            AuditOutcome.SUCCESS,
-            null,
-            null,
-            OffsetDateTime.now(ZoneOffset.UTC));
+  void shouldReturnAuditEventsByAggregateAndActor() {
+    AuditEvent first = createAuditEvent("TRANSFER_CREATED", "TRANSFER", "transfer-123");
 
-    AuditEvent second =
-        AuditEvent.create(
-            "TRANSFER_COMPLETED",
-            "TRANSFER",
-            "transfer-123",
-            null,
-            AuditOutcome.SUCCESS,
-            null,
-            null,
-            OffsetDateTime.now(ZoneOffset.UTC));
+    AuditEvent second = createAuditEvent("TRANSFER_COMPLETED", "TRANSFER", "transfer-123");
 
-    when(auditEventRepository.findAllByAggregateTypeAndAggregateId("TRANSFER", "transfer-123"))
+    when(auditEventRepository.findAllByAggregateTypeAndAggregateIdAndActorId(
+            "TRANSFER", "transfer-123", ACTOR_ID))
         .thenReturn(List.of(first, second));
 
     List<AuditEventResponse> responses =
-        auditEventService.getByAggregate("TRANSFER", "transfer-123");
+        auditEventService.getByAggregate("TRANSFER", "transfer-123", ACTOR_ID);
 
     assertEquals(2, responses.size());
+
     assertEquals(first.getId(), responses.get(0).id());
+
     assertEquals(second.getId(), responses.get(1).id());
 
-    verify(auditEventRepository).findAllByAggregateTypeAndAggregateId("TRANSFER", "transfer-123");
+    verify(auditEventRepository)
+        .findAllByAggregateTypeAndAggregateIdAndActorId("TRANSFER", "transfer-123", ACTOR_ID);
   }
 
   @Test
   void shouldReturnAuditEventsByActor() {
-    UUID actorId = UUID.randomUUID();
-
-    AuditEvent first =
-        AuditEvent.create(
-            "ACCOUNT_CREATED",
-            "ACCOUNT",
-            UUID.randomUUID().toString(),
-            actorId,
-            AuditOutcome.SUCCESS,
-            null,
-            null,
-            OffsetDateTime.now(ZoneOffset.UTC));
+    AuditEvent first = createAuditEvent("ACCOUNT_CREATED", "ACCOUNT", UUID.randomUUID().toString());
 
     AuditEvent second =
-        AuditEvent.create(
-            "TRANSFER_CREATED",
-            "TRANSFER",
-            UUID.randomUUID().toString(),
-            actorId,
-            AuditOutcome.SUCCESS,
-            null,
-            null,
-            OffsetDateTime.now(ZoneOffset.UTC));
+        createAuditEvent("TRANSFER_CREATED", "TRANSFER", UUID.randomUUID().toString());
 
-    when(auditEventRepository.findAllByActorId(actorId)).thenReturn(List.of(first, second));
+    when(auditEventRepository.findAllByActorId(ACTOR_ID)).thenReturn(List.of(first, second));
 
-    List<AuditEventResponse> responses = auditEventService.getByActor(actorId);
+    List<AuditEventResponse> responses = auditEventService.getByActor(ACTOR_ID);
 
     assertEquals(2, responses.size());
+
     assertEquals(first.getId(), responses.get(0).id());
+
     assertEquals(second.getId(), responses.get(1).id());
 
-    verify(auditEventRepository).findAllByActorId(actorId);
+    verify(auditEventRepository).findAllByActorId(ACTOR_ID);
   }
 
   @Test
-  void shouldReturnAuditEventsByEventType() {
+  void shouldReturnAuditEventsByEventTypeAndActor() {
     AuditEvent first =
-        AuditEvent.create(
-            "TRANSFER_FAILED",
-            "TRANSFER",
-            UUID.randomUUID().toString(),
-            null,
-            AuditOutcome.FAILURE,
-            null,
-            null,
-            OffsetDateTime.now(ZoneOffset.UTC));
+        createAuditEvent("TRANSFER_FAILED", "TRANSFER", UUID.randomUUID().toString());
 
     AuditEvent second =
-        AuditEvent.create(
-            "TRANSFER_FAILED",
-            "TRANSFER",
-            UUID.randomUUID().toString(),
-            null,
-            AuditOutcome.FAILURE,
-            null,
-            null,
-            OffsetDateTime.now(ZoneOffset.UTC));
+        createAuditEvent("TRANSFER_FAILED", "TRANSFER", UUID.randomUUID().toString());
 
-    when(auditEventRepository.findAllByEventType("TRANSFER_FAILED"))
+    when(auditEventRepository.findAllByEventTypeAndActorId("TRANSFER_FAILED", ACTOR_ID))
         .thenReturn(List.of(first, second));
 
-    List<AuditEventResponse> responses = auditEventService.getByEventType("TRANSFER_FAILED");
+    List<AuditEventResponse> responses =
+        auditEventService.getByEventType("TRANSFER_FAILED", ACTOR_ID);
 
     assertEquals(2, responses.size());
+
     assertEquals(first.getId(), responses.get(0).id());
+
     assertEquals(second.getId(), responses.get(1).id());
 
-    verify(auditEventRepository).findAllByEventType("TRANSFER_FAILED");
+    verify(auditEventRepository).findAllByEventTypeAndActorId("TRANSFER_FAILED", ACTOR_ID);
   }
 
   @Test
-  void shouldReturnEmptyListWhenNoAggregateEventsExist() {
-    when(auditEventRepository.findAllByAggregateTypeAndAggregateId("TRANSFER", "missing-transfer"))
+  void shouldReturnEmptyListWhenNoAccessibleAggregateEventsExist() {
+    when(auditEventRepository.findAllByAggregateTypeAndAggregateIdAndActorId(
+            "TRANSFER", "missing-transfer", ACTOR_ID))
         .thenReturn(List.of());
 
     List<AuditEventResponse> responses =
-        auditEventService.getByAggregate("TRANSFER", "missing-transfer");
+        auditEventService.getByAggregate("TRANSFER", "missing-transfer", ACTOR_ID);
 
     assertEquals(0, responses.size());
 
     verify(auditEventRepository)
-        .findAllByAggregateTypeAndAggregateId("TRANSFER", "missing-transfer");
+        .findAllByAggregateTypeAndAggregateIdAndActorId("TRANSFER", "missing-transfer", ACTOR_ID);
   }
 
   private AuditEventMessage createMessage() {
@@ -353,21 +318,32 @@ class AuditEventServiceTest {
         AuditOutcome.SUCCESS,
         "Transfer completed successfully",
         Map.of(
-            "sourceAccountId", "11111111-1111-1111-1111-111111111111",
-            "destinationAccountId", "22222222-2222-2222-2222-222222222222",
-            "amount", new BigDecimal("25"),
-            "currency", "EUR",
-            "status", "COMPLETED",
-            "idempotencyKey", "e2e-outbox-kafka-001"),
+            "sourceAccountId",
+            "11111111-1111-1111-1111-111111111111",
+            "destinationAccountId",
+            "22222222-2222-2222-2222-222222222222",
+            "amount",
+            new BigDecimal("25"),
+            "currency",
+            "EUR",
+            "status",
+            "COMPLETED",
+            "idempotencyKey",
+            "e2e-outbox-kafka-001"),
         OCCURRED_AT);
   }
 
   private AuditEvent createAuditEvent() {
+    return createAuditEvent("TRANSFER_COMPLETED", "TRANSFER", "transfer-123");
+  }
+
+  private AuditEvent createAuditEvent(String eventType, String aggregateType, String aggregateId) {
+
     return AuditEvent.create(
-        "TRANSFER_COMPLETED",
-        "TRANSFER",
-        "transfer-123",
-        UUID.randomUUID(),
+        eventType,
+        aggregateType,
+        aggregateId,
+        ACTOR_ID,
         AuditOutcome.SUCCESS,
         "Transfer completed successfully",
         "{\"amount\":100}",
