@@ -6,6 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import {
   FormBuilder,
   ReactiveFormsModule,
@@ -74,12 +75,17 @@ export class TransferCreate {
     ),
   );
 
+  private readonly selectedAccountId = toSignal(
+    this.form.controls.sourceAccountId.valueChanges,
+    { initialValue: this.form.controls.sourceAccountId.value },
+  );
+
   readonly selectedAccount = computed(
     () =>
       this.accounts().find(
         (account) =>
           account.id ===
-          this.form.controls.sourceAccountId.value,
+          this.selectedAccountId(),
       ) ?? null,
   );
 
